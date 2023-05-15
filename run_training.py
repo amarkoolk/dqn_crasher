@@ -6,6 +6,7 @@ import matplotlib
 from matplotlib import pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
+from tqdm import tqdm
 
 from dqn import DQN
 
@@ -16,6 +17,13 @@ import torch.nn.functional as F
 
 wlog = True
 
+collision_coefficient = 5
+ttc_x_coefficient = 1
+ttc_y_coefficient = 1
+
+spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
+num_configs = 1
+
 if wlog:
     wandb.init(
         # set the wandb project where this run will be logged
@@ -25,13 +33,17 @@ if wlog:
         config={
         "learning_rate": 1e-4,
         "architecture": "DQN",
-        "max_duration": 20,
+        "max_duration": 100,
         "dataset": "Highway-Env",
-        "epochs": 500,
+        "epochs": 1000,
+        "collision_reward": collision_coefficient,
+        "ttc_x_reward": ttc_x_coefficient,
+        "ttc_y_reward": ttc_y_coefficient,
+        "num_configs": num_configs
         }
     )
 
-env = gym.make('crash-v0')
+env = gym.make('crash-v0', render_mode='rgb_array')
 env.configure({
     "observation": {
         "type": "Kinematics",
@@ -39,7 +51,7 @@ env.configure({
     },
     "action": {
         "type": "DiscreteMetaAction",
-        "target_speeds": [0, 30]
+        "target_speeds": list(range(15,35))
     },
     "lanes_count" : 2,
     "vehicles_count" : 1,
@@ -48,9 +60,10 @@ env.configure({
     "initial_lane_id" : None,
     "mean_distance": 20,
     "mean_delta_v": 0,
-    "collision_reward": 5,    # The reward received when colliding with a vehicle.
-    "ttc_x_reward": 1,  # The reward range for time to collision in the x direction with the ego vehicle.
-    "ttc_y_reward": 1,  # The reward range for time to collision in the y direction with the ego vehicle.
+    "collision_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
+    "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
+    "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
+    "spawn_configs" : ['behind_left']
 })
 
 # set up matplotlib
@@ -205,12 +218,12 @@ def optimize_model():
     optimizer.step()
 
 if torch.cuda.is_available():
-    num_episodes = 600
+    num_episodes = 1000
 else:
-    num_episodes = 500
+    num_episodes = 1000
 
 
-for i_episode in range(num_episodes):
+for i_episode in tqdm(range(num_episodes)):
     # Initialize the environment and get it's state
 
     episode_reward = 0
@@ -219,6 +232,8 @@ for i_episode in range(num_episodes):
     for t in count():
         action = select_action(state)
         observation, reward, terminated, truncated, _ = env.step(action.item())
+        env.render()
+
         reward = torch.tensor([reward], device=device)
         done = terminated or truncated
 
@@ -252,7 +267,8 @@ for i_episode in range(num_episodes):
             if wlog:
                 wandb.log({"reward": episode_reward, "duration": t+1})
             break
-
+        
+plt.imshow(env.render())
 print('Complete')
 plot_durations(show_result=True)
 plt.ioff()
