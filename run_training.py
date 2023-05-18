@@ -1,5 +1,7 @@
 import wandb
 import gymnasium as gym
+from gymnasium import logger
+from gymnasium.wrappers.record_video import RecordVideo
 import math
 import random
 import matplotlib
@@ -15,9 +17,9 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-wlog = True
+wlog = False
 
-collision_coefficient = 5
+collision_coefficient = 100
 ttc_x_coefficient = 1
 ttc_y_coefficient = 1
 
@@ -39,11 +41,13 @@ if wlog:
         "collision_reward": collision_coefficient,
         "ttc_x_reward": ttc_x_coefficient,
         "ttc_y_reward": ttc_y_coefficient,
-        "num_configs": num_configs
+        "num_configs": num_configs,
         }
     )
 
 env = gym.make('crash-v0', render_mode='rgb_array')
+env = RecordVideo(env, video_folder = './video', episode_trigger=lambda e: True)
+env.unwrapped.set_record_video_wrapper(env)
 env.configure({
     "observation": {
         "type": "Kinematics",
@@ -56,14 +60,14 @@ env.configure({
     "lanes_count" : 2,
     "vehicles_count" : 1,
     "duration" : 100,
-    "manual_control" : True,
     "initial_lane_id" : None,
     "mean_distance": 20,
     "mean_delta_v": 0,
+    "policy_frequency": 1,
     "collision_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
     "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
     "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
-    "spawn_configs" : ['behind_left']
+    "spawn_configs": spawn_configs[:num_configs]
 })
 
 # set up matplotlib
@@ -220,24 +224,30 @@ def optimize_model():
 if torch.cuda.is_available():
     num_episodes = 1000
 else:
-    num_episodes = 1000
+    num_episodes = 100
 
-
+num_crashes = 0
 for i_episode in tqdm(range(num_episodes)):
     # Initialize the environment and get it's state
 
     episode_reward = 0
+    ttc_x = 0
+    ttc_y = 0
     state, info = env.reset()
+    env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
     state = torch.tensor(state.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
         action = select_action(state)
-        observation, reward, terminated, truncated, _ = env.step(action.item())
+        observation, reward, terminated, truncated, info = env.step(action.item())
         env.render()
 
         reward = torch.tensor([reward], device=device)
         done = terminated or truncated
 
         episode_reward += reward.item()
+        ttc_x += info['ttc_x']
+        ttc_y += info['ttc_y']
+        num_crashes += float(info['crashed'])
 
         if terminated:
             next_state = None
@@ -265,11 +275,9 @@ for i_episode in tqdm(range(num_episodes)):
             episode_rewards.append(episode_reward)
             # plot_durations()
             if wlog:
-                wandb.log({"reward": episode_reward, "duration": t+1})
+                wandb.log({"reward": episode_reward, "duration": t+1, "ttc_x": ttc_x, "ttc_y": ttc_y, "num_crashes": num_crashes})
             break
-        
+
 plt.imshow(env.render())
 print('Complete')
-plot_durations(show_result=True)
-plt.ioff()
-plt.show()
+env.close()
