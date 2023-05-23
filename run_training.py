@@ -9,6 +9,7 @@ from matplotlib import pyplot as plt
 from collections import namedtuple, deque
 from itertools import count
 from tqdm import tqdm
+import logging
 
 from dqn import DQN
 
@@ -17,14 +18,21 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-wlog = False
+wlog = True
+save_model = True
+record_video = False
+save_every = 1000
 
+num_episodes = 1000
 collision_coefficient = 100
-ttc_x_coefficient = 1
+ttc_x_coefficient = 2
 ttc_y_coefficient = 1
 
 spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
-num_configs = 1
+num_configs = 8
+
+spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
+num_configs = 3
 
 if wlog:
     wandb.init(
@@ -37,7 +45,7 @@ if wlog:
         "architecture": "DQN",
         "max_duration": 100,
         "dataset": "Highway-Env",
-        "epochs": 1000,
+        "episodes": num_episodes,
         "collision_reward": collision_coefficient,
         "ttc_x_reward": ttc_x_coefficient,
         "ttc_y_reward": ttc_y_coefficient,
@@ -45,10 +53,7 @@ if wlog:
         }
     )
 
-env = gym.make('crash-v0', render_mode='rgb_array')
-env = RecordVideo(env, video_folder = './video', episode_trigger=lambda e: True)
-env.unwrapped.set_record_video_wrapper(env)
-env.configure({
+env_config = {
     "observation": {
         "type": "Kinematics",
         "normalize": False
@@ -68,7 +73,12 @@ env.configure({
     "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
     "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
     "spawn_configs": spawn_configs[:num_configs]
-})
+}
+env = gym.make('crash-v0', render_mode='rgb_array')
+if record_video:
+    env = RecordVideo(env, video_folder = './video', episode_trigger=lambda e: True)
+    env.unwrapped.set_record_video_wrapper(env)
+env.configure(env_config)
 
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
@@ -221,12 +231,12 @@ def optimize_model():
     torch.nn.utils.clip_grad_value_(policy_net.parameters(), 100)
     optimizer.step()
 
-if torch.cuda.is_available():
-    num_episodes = 1000
-else:
-    num_episodes = 100
+# if torch.cuda.is_available():
+#     num_episodes = 1000
+# else:
+#     num_episodes = 100
 
-num_crashes = 0
+num_crashes = []
 for i_episode in tqdm(range(num_episodes)):
     # Initialize the environment and get it's state
 
@@ -234,12 +244,14 @@ for i_episode in tqdm(range(num_episodes)):
     ttc_x = 0
     ttc_y = 0
     state, info = env.reset()
-    env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
+    if record_video:
+        env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
     state = torch.tensor(state.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
         action = select_action(state)
         observation, reward, terminated, truncated, info = env.step(action.item())
-        env.render()
+        if record_video:
+            env.render()
 
         reward = torch.tensor([reward], device=device)
         done = terminated or truncated
@@ -247,7 +259,7 @@ for i_episode in tqdm(range(num_episodes)):
         episode_reward += reward.item()
         ttc_x += info['ttc_x']
         ttc_y += info['ttc_y']
-        num_crashes += float(info['crashed'])
+        num_crashes.append(float(info['crashed']))
 
         if terminated:
             next_state = None
@@ -271,13 +283,18 @@ for i_episode in tqdm(range(num_episodes)):
             target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
         target_net.load_state_dict(target_net_state_dict)
 
+        if save_model and (i_episode%save_every == 0 and i_episode > 0):
+            torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(i_episode))
+
         if done:
             episode_rewards.append(episode_reward)
             # plot_durations()
             if wlog:
-                wandb.log({"reward": episode_reward, "duration": t+1, "ttc_x": ttc_x, "ttc_y": ttc_y, "num_crashes": num_crashes})
+                wandb.log({"train/reward": episode_reward, "train/duration": t+1, "train/success_rate": sum(num_crashes)/(i_episode+1), "train/num_crashes": sum(num_crashes)})
             break
 
-plt.imshow(env.render())
+if save_model:
+    torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(len(episode_rewards)))
+
 print('Complete')
 env.close()
