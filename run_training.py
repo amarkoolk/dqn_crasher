@@ -20,12 +20,12 @@ import torch.nn.functional as F
 
 wlog = True
 save_model = True
-record_video = False
+record_video = True
 save_every = 1000
 
 num_episodes = 1000
-collision_coefficient = 100
-ttc_x_coefficient = 2
+collision_coefficient = 400
+ttc_x_coefficient = 4
 ttc_y_coefficient = 1
 
 spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
@@ -76,7 +76,7 @@ env_config = {
 }
 env = gym.make('crash-v0', render_mode='rgb_array')
 if record_video:
-    env = RecordVideo(env, video_folder = './video', episode_trigger=lambda e: True)
+    env = RecordVideo(env, video_folder = wandb.run.dir + '/video', episode_trigger=lambda e: e % 100 == 0)
     env.unwrapped.set_record_video_wrapper(env)
 env.configure(env_config)
 
@@ -244,13 +244,13 @@ for i_episode in tqdm(range(num_episodes)):
     ttc_x = 0
     ttc_y = 0
     state, info = env.reset()
-    if record_video:
+    if record_video and (i_episode % 100 == 0):
         env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
     state = torch.tensor(state.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
     for t in count():
         action = select_action(state)
         observation, reward, terminated, truncated, info = env.step(action.item())
-        if record_video:
+        if record_video and (i_episode % 100 == 0):
             env.render()
 
         reward = torch.tensor([reward], device=device)
