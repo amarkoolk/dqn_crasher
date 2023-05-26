@@ -18,10 +18,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-wlog = True
-save_model = True
+wlog = False
+save_model = False
 record_video = True
 save_every = 1000
+
+num_workers = 3
 
 num_episodes = 1000
 collision_coefficient = 400
@@ -76,9 +78,14 @@ env_config = {
 }
 env = gym.make('crash-v0', render_mode='rgb_array')
 if record_video:
-    env = RecordVideo(env, video_folder = wandb.run.dir + '/video', episode_trigger=lambda e: e % 100 == 0)
-    env.unwrapped.set_record_video_wrapper(env)
-env.configure(env_config)
+    video_wrapper = RecordVideo(env, video_folder = './video', episode_trigger=lambda e: e % 100 == 0)
+    env = gym.vector.make('crash-v0', 
+                          num_envs = num_workers, 
+                          wrappers=RecordVideo,
+                          config = env_config, 
+                          render_mode='rgb_array')
+else:
+    env = gym.vector.make('crash-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
 
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
