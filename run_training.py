@@ -10,6 +10,11 @@ from collections import namedtuple, deque
 from itertools import count
 from tqdm import tqdm
 import logging
+import warnings
+warnings.filterwarnings("ignore", message="divide by zero encountered in double_scalars")
+warnings.filterwarnings("ignore", message="invalid value encountered in double_scalars")
+warnings.filterwarnings("ignore", message="overflow encountered in exp")
+import numpy as np
 
 from dqn import DQN
 
@@ -23,16 +28,15 @@ save_model = True
 record_video = True
 save_every = 1000
 
-num_episodes = 1000
+num_episodes = 5000
 collision_coefficient = 400
 ttc_x_coefficient = 4
 ttc_y_coefficient = 1
 
 spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
 num_configs = 8
-
-spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
-num_configs = 3
+# spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
+# num_configs = 3
 
 if wlog:
     wandb.init(
@@ -52,6 +56,8 @@ if wlog:
         "num_configs": num_configs,
         }
     )
+
+    logging.basicConfig(filename=wandb.run.dir + '/episode_rollouts.log', level=logging.INFO)
 
 env_config = {
     "observation": {
@@ -241,8 +247,12 @@ for i_episode in tqdm(range(num_episodes)):
     # Initialize the environment and get it's state
 
     episode_reward = 0
-    ttc_x = 0
-    ttc_y = 0
+    x_dist = []
+    y_dist = []
+    x_vel = []
+    y_vel = []
+    ttc_x = []
+    ttc_y = []
     state, info = env.reset()
     if record_video and (i_episode % 100 == 0):
         env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
@@ -257,8 +267,12 @@ for i_episode in tqdm(range(num_episodes)):
         done = terminated or truncated
 
         episode_reward += reward.item()
-        ttc_x += info['ttc_x']
-        ttc_y += info['ttc_y']
+        ttc_x.append(abs(info['ttc_x']))
+        ttc_y.append(abs(info['ttc_y']))
+        x_dist.append(abs(info['dx']))
+        y_dist.append(abs(info['dy']))
+        x_vel.append(abs(info['dvx']))
+        y_vel.append(abs(info['dvy']))
         num_crashes.append(float(info['crashed']))
 
         if terminated:
@@ -286,11 +300,24 @@ for i_episode in tqdm(range(num_episodes)):
         if save_model and (i_episode%save_every == 0 and i_episode > 0):
             torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(i_episode))
 
+        if wlog:
+            logging.info("Episode:{},Step:{},Observations:{},Actions:{},Reward:{},Done:{},Info:{}".format(i_episode, t, np.asarray(observation), action, reward, done, info))
+
         if done:
             episode_rewards.append(episode_reward)
             # plot_durations()
             if wlog:
-                wandb.log({"train/reward": episode_reward, "train/duration": t+1, "train/success_rate": sum(num_crashes)/(i_episode+1), "train/num_crashes": sum(num_crashes)})
+                wandb.log({"train/reward": episode_reward, \
+                           "train/duration": t+1, \
+                           "train/success_rate": sum(num_crashes)/(i_episode+1), \
+                           "train/sr_100": sum(num_crashes[-100:])/(100), \
+                           "train/num_crashes": sum(num_crashes),\
+                           "train/min_ttcx": min(ttc_x), \
+                           "train/min_ttcy": min(ttc_y), \
+                           "train/min_x_dist": min(x_dist), \
+                           "train/min_y_dist": min(y_dist), \
+                           "train/min_x_vel": min(x_vel), \
+                           "train/min_y_vel": min(y_vel)})
             break
 
 if save_model:
