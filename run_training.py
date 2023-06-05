@@ -10,8 +10,16 @@ from collections import namedtuple, deque
 from itertools import count
 from tqdm import tqdm
 import logging
+import warnings
+warnings.filterwarnings("ignore", message="divide by zero encountered in double_scalars")
+warnings.filterwarnings("ignore", message="invalid value encountered in double_scalars")
+warnings.filterwarnings("ignore", message="overflow encountered in exp")
+warnings.filterwarnings("ignore", message="divide by zero encountered in scalar divide")
+warnings.filterwarnings("ignore", message="invalid value encountered in scalar divide")
 
 from dqn import DQN
+
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -20,7 +28,7 @@ import torch.nn.functional as F
 
 wlog = False
 save_model = False
-record_video = True
+record_video = False
 save_every = 1000
 
 num_workers = 3
@@ -78,12 +86,14 @@ env_config = {
 }
 env = gym.make('crash-v0', render_mode='rgb_array')
 if record_video:
-    video_wrapper = RecordVideo(env, video_folder = './video', episode_trigger=lambda e: e % 100 == 0)
-    env = gym.vector.make('crash-v0', 
-                          num_envs = num_workers, 
-                          wrappers=RecordVideo,
-                          config = env_config, 
-                          render_mode='rgb_array')
+    env = gym.vector.AsyncVectorEnv([
+        lambda: RecordVideo(gym.make('crash-v0', config = env_config, render_mode='rgb_array'), \
+                                        video_folder = './video', \
+                                        episode_trigger=lambda e: e % 100 == 0),
+        lambda: RecordVideo(gym.make('crash-v0', config = env_config, render_mode='rgb_array'), \
+                                        video_folder = './video', \
+                                        episode_trigger=lambda e: e % 100 == 0)
+    ])
 else:
     env = gym.vector.make('crash-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
 
@@ -131,10 +141,10 @@ TAU = 0.005
 LR = 1e-4
 
 # Get number of actions from gym action space
-n_actions = env.action_space.n
+n_actions = env.action_space.nvec[0]
 # Get the number of state observations
 state, info = env.reset()
-n_observations = len(state.flatten())
+n_observations = len(state[0].flatten())
 
 policy_net = DQN(n_observations, n_actions).to(device)
 target_net = DQN(n_observations, n_actions).to(device)
@@ -158,9 +168,10 @@ def select_action(state):
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
-            return policy_net(state).max(1)[1].view(1, 1)
+            return policy_net(state).max(1)[1].view(num_workers, 1)
     else:
-        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+        # print('Action Space: {}'.format(torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long).shape))
+        return torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long)
 
 
 episode_durations = []
@@ -253,30 +264,32 @@ for i_episode in tqdm(range(num_episodes)):
     state, info = env.reset()
     if record_video and (i_episode % 100 == 0):
         env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
-    state = torch.tensor(state.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
+    state = torch.tensor(state.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
     for t in count():
-        action = select_action(state)
-        observation, reward, terminated, truncated, info = env.step(action.item())
+        action = torch.squeeze(select_action(state))
+        observation, reward, terminated, truncated, info = env.step(action)
         if record_video and (i_episode % 100 == 0):
             env.render()
 
-        reward = torch.tensor([reward], device=device)
-        done = terminated or truncated
+        reward = torch.tensor(reward, device=device)
+        done = terminated | truncated
+        # if done.any():
+        #     print('Final Observation: {}'.format(info['final_observation']))
+        #     print('Final Info: {}'.format(info['final_info']))
 
-        episode_reward += reward.item()
-        ttc_x += info['ttc_x']
-        ttc_y += info['ttc_y']
-        num_crashes.append(float(info['crashed']))
-
-        if terminated:
-            next_state = None
-        else:
-            next_state = torch.tensor(observation.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
-
-        # Store the transition in memory
-        memory.push(state, action, next_state, reward)
-
-        # Move to the next state
+        print('Info: {}'.format(info))
+        # episode_reward += reward.item()
+        # ttc_x += info['ttc_x']
+        # ttc_y += info['ttc_y']
+        # num_crashes.append(float(info['crashed']))
+        
+        next_state = torch.tensor(observation.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
+        for worker in range(num_workers):
+            if terminated[worker]:
+                memory.push(state[worker].view(1,n_observations),action[worker].view(1,1),None,reward[worker].view(1,1))
+            else:
+                memory.push(state[worker].view(1,n_observations),action[worker].view(1,1),next_state[worker].view(1,n_observations),reward[worker].view(1,1))
+        
         state = next_state
 
         # Perform one step of the optimization (on the policy network)
@@ -293,12 +306,12 @@ for i_episode in tqdm(range(num_episodes)):
         if save_model and (i_episode%save_every == 0 and i_episode > 0):
             torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(i_episode))
 
-        if done:
-            episode_rewards.append(episode_reward)
-            # plot_durations()
-            if wlog:
-                wandb.log({"train/reward": episode_reward, "train/duration": t+1, "train/success_rate": sum(num_crashes)/(i_episode+1), "train/num_crashes": sum(num_crashes)})
-            break
+        # if done:
+        #     episode_rewards.append(episode_reward)
+        #     # plot_durations()
+        #     if wlog:
+        #         wandb.log({"train/reward": episode_reward, "train/duration": t+1, "train/success_rate": sum(num_crashes)/(i_episode+1), "train/num_crashes": sum(num_crashes)})
+        #     break
 
 if save_model:
     torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(len(episode_rewards)))
