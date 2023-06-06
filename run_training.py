@@ -31,7 +31,7 @@ save_model = False
 record_video = False
 save_every = 1000
 
-num_workers = 3
+num_workers = 16
 
 num_episodes = 1000
 collision_coefficient = 400
@@ -72,17 +72,17 @@ env_config = {
         "type": "DiscreteMetaAction",
         "target_speeds": list(range(15,35))
     },
-    "lanes_count" : 2,
-    "vehicles_count" : 1,
-    "duration" : 100,
-    "initial_lane_id" : None,
-    "mean_distance": 20,
-    "mean_delta_v": 0,
-    "policy_frequency": 1,
-    "collision_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
-    "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
-    "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
-    "spawn_configs": spawn_configs[:num_configs]
+    # "lanes_count" : 2,
+    # "vehicles_count" : 1,
+    # "duration" : 100,
+    # "initial_lane_id" : None,
+    # "mean_distance": 20,
+    # "mean_delta_v": 0,
+    # "policy_frequency": 1,
+    # "collision_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
+    # "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
+    # "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
+    # "spawn_configs": spawn_configs[:num_configs]
 }
 env = gym.make('crash-v0', render_mode='rgb_array')
 if record_video:
@@ -95,7 +95,8 @@ if record_video:
                                         episode_trigger=lambda e: e % 100 == 0)
     ])
 else:
-    env = gym.vector.make('crash-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
+    # env = gym.vector.make('crash-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
+    env = gym.vector.make('highway-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
 
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
@@ -254,18 +255,19 @@ def optimize_model():
 # else:
 #     num_episodes = 100
 
-num_crashes = []
-for i_episode in tqdm(range(num_episodes)):
-    # Initialize the environment and get it's state
+i_episode = 0
+episode_reward = 0
+ttc_x = 0
+ttc_y = 0
+state, info = env.reset()
+if record_video and (i_episode % 100 == 0):
+    env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
+state = torch.tensor(state.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
 
-    episode_reward = 0
-    ttc_x = 0
-    ttc_y = 0
-    state, info = env.reset()
-    if record_video and (i_episode % 100 == 0):
-        env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
-    state = torch.tensor(state.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
-    for t in count():
+max_steps = 10000
+t_step = 0
+with tqdm(total=max_steps) as pbar:
+    while(True):
         action = torch.squeeze(select_action(state))
         observation, reward, terminated, truncated, info = env.step(action)
         if record_video and (i_episode % 100 == 0):
@@ -277,7 +279,7 @@ for i_episode in tqdm(range(num_episodes)):
         #     print('Final Observation: {}'.format(info['final_observation']))
         #     print('Final Info: {}'.format(info['final_info']))
 
-        print('Info: {}'.format(info))
+        # print('Info: {}'.format(info))
         # episode_reward += reward.item()
         # ttc_x += info['ttc_x']
         # ttc_y += info['ttc_y']
@@ -289,7 +291,7 @@ for i_episode in tqdm(range(num_episodes)):
                 memory.push(state[worker].view(1,n_observations),action[worker].view(1,1),None,reward[worker].view(1,1))
             else:
                 memory.push(state[worker].view(1,n_observations),action[worker].view(1,1),next_state[worker].view(1,n_observations),reward[worker].view(1,1))
-        
+
         state = next_state
 
         # Perform one step of the optimization (on the policy network)
@@ -305,6 +307,15 @@ for i_episode in tqdm(range(num_episodes)):
 
         if save_model and (i_episode%save_every == 0 and i_episode > 0):
             torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(i_episode))
+
+        for worker in range(num_workers):
+            if done[worker]:
+                i_episode += 1
+            t_step += 1
+            pbar.update(1)
+
+        if t_step >= max_steps:
+            break
 
         # if done:
         #     episode_rewards.append(episode_reward)
