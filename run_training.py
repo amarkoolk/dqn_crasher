@@ -16,6 +16,7 @@ warnings.filterwarnings("ignore", message="invalid value encountered in double_s
 warnings.filterwarnings("ignore", message="overflow encountered in exp")
 import numpy as np
 
+import argparse
 from dqn import DQN
 
 import torch
@@ -23,20 +24,87 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+
+
+parser = argparse.ArgumentParser(description='Crash DQN')
+# GENERIC RL/MODEL PARAMETERS
+parser.add_argument('--lr', type=float, default=0.0001,
+                    help='learning rate')
+parser.add_argument('--env-name', type=str, default='crash-v0',
+                    help='gym environment name')
+parser.add_argument('--num-workers', type=int, default=1,
+                    help='number of parallel environments to run')
+parser.add_argument('--max-steps', type=int, default=int(1e8),
+                    help='maximum number of training steps in total')
+parser.add_argument('--cuda', type=bool, default=True,
+                    help='Add cuda')
+parser.add_argument('--entropy-coef', type=float, default=0.01,
+                    help='Entropy coefficient to encourage exploration.')
+
+# SPECIFIC DQN PARAMETERS  
+parser.add_argument('--batch-size', type=int, default=128,
+                    help='Manager horizon (c)')
+parser.add_argument('--hidden-dim', type=int, default=128,
+                    help='Hidden dim (d)')
+parser.add_argument('--gamma', type=float, default=0.99,
+                    help="discount factor")
+parser.add_argument('--eps_start', type=float, default=0.9,
+                    help='Random Gausian goal for exploration')
+parser.add_argument('--eps_end', type=float, default=0.05,
+                    help='Random Gausian goal for exploration')
+parser.add_argument('--eps_decay', type=int, default=1000,
+                    help='Random Gausian goal for exploration')
+parser.add_argument('--tau', type=float, default=0.005,
+                    help='Rate at which to update target network')
+parser.add_argument('--replay-buffer', type=int, default=10000,
+                    help='Size of replay memory buffer')
+
+# CRASH PARAMETERS
+
+parser.add_argument('--collision-coefficient', type=int, default=400,
+                    help='reward for collision')
+parser.add_argument('--ttc-x-coefficient', type=int, default=4,
+                    help='coefficient for ttx-x reward')
+parser.add_argument('--ttc-y-coefficient', type=int, default=1,
+                    help='coefficient for ttx-y reward')
+
+parser.add_argument('--seed', type=int, default=0,
+                    help='reproducibility seed.')
+
+args = parser.parse_args()
+
 wlog = True
 save_model = True
 record_video = True
 save_every = 1000
 
-num_episodes = 5000
-collision_coefficient = 400
-ttc_x_coefficient = 4
-ttc_y_coefficient = 1
+max_steps = args.max_steps
+collision_coefficient = args.collision_coefficient
+ttc_x_coefficient = args.ttc_x_coefficient
+ttc_y_coefficient = args.ttc_y_coefficient
 
 spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
 num_configs = 8
 # spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
 # num_configs = 3
+
+# BATCH_SIZE is the number of transitions sampled from the replay buffer
+# GAMMA is the discount factor as mentioned in the previous section
+# EPS_START is the starting value of epsilon
+# EPS_END is the final value of epsilon
+# EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
+# TAU is the update rate of the target network
+# LR is the learning rate of the ``AdamW`` optimizer
+BATCH_SIZE = args.batch_size
+GAMMA = args.gamma
+EPS_START = args.eps_start
+EPS_END = args.eps_end
+EPS_DECAY = args.eps_decay
+TAU = args.tau
+LR = args.lr
+ReplayBuffer = args.replay_buffer
+
+hidden_dim = args.hidden_dim
 
 if wlog:
     wandb.init(
@@ -45,15 +113,23 @@ if wlog:
         
         # track hyperparameters and run metadata
         config={
-        "learning_rate": 1e-4,
+        "learning_rate": LR,
         "architecture": "DQN",
         "max_duration": 100,
         "dataset": "Highway-Env",
-        "episodes": num_episodes,
+        "max_steps": max_steps,
         "collision_reward": collision_coefficient,
         "ttc_x_reward": ttc_x_coefficient,
         "ttc_y_reward": ttc_y_coefficient,
         "num_configs": num_configs,
+        "BATCH_SIZE": BATCH_SIZE,
+        "GAMMA": GAMMA,
+        "EPS_START": EPS_START,
+        "EPS_END": EPS_END,
+        "EPS_DECAY": EPS_DECAY,
+        "TAU": TAU,
+        "hidden_dim": hidden_dim,
+        "ReplayBuffer": ReplayBuffer
         }
     )
 
@@ -114,20 +190,7 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-# BATCH_SIZE is the number of transitions sampled from the replay buffer
-# GAMMA is the discount factor as mentioned in the previous section
-# EPS_START is the starting value of epsilon
-# EPS_END is the final value of epsilon
-# EPS_DECAY controls the rate of exponential decay of epsilon, higher means a slower decay
-# TAU is the update rate of the target network
-# LR is the learning rate of the ``AdamW`` optimizer
-BATCH_SIZE = 128
-GAMMA = 0.99
-EPS_START = 0.9
-EPS_END = 0.05
-EPS_DECAY = 1000
-TAU = 0.005
-LR = 1e-4
+
 
 # Get number of actions from gym action space
 n_actions = env.action_space.n
@@ -135,12 +198,12 @@ n_actions = env.action_space.n
 state, info = env.reset()
 n_observations = len(state.flatten())
 
-policy_net = DQN(n_observations, n_actions).to(device)
-target_net = DQN(n_observations, n_actions).to(device)
+policy_net = DQN(n_observations, n_actions, hidden_dim).to(device)
+target_net = DQN(n_observations, n_actions, hidden_dim).to(device)
 target_net.load_state_dict(policy_net.state_dict())
 
 optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
-memory = ReplayMemory(10000)
+memory = ReplayMemory(ReplayBuffer)
 
 
 steps_done = 0
@@ -203,7 +266,7 @@ def optimize_model():
     # Compute a mask of non-final states and concatenate the batch elements
     # (a final state would've been the one after which simulation ended)
     non_final_mask = torch.tensor(tuple(map(lambda s: s is not None,
-                                          batch.next_state)), device=device, dtype=torch.bool)
+                                        batch.next_state)), device=device, dtype=torch.bool)
     non_final_next_states = torch.cat([s for s in batch.next_state
                                                 if s is not None])
     state_batch = torch.cat(batch.state)
@@ -243,82 +306,99 @@ def optimize_model():
 #     num_episodes = 100
 
 num_crashes = []
-for i_episode in tqdm(range(num_episodes)):
-    # Initialize the environment and get it's state
-
-    episode_reward = 0
-    x_dist = []
-    y_dist = []
-    x_vel = []
-    y_vel = []
-    ttc_x = []
-    ttc_y = []
-    state, info = env.reset()
+episode_crashes = []
+i_episode = 0     
+episode_reward = 0
+x_dist = []
+y_dist = []
+x_vel = []
+y_vel = []
+ttc_x = []
+ttc_y = []
+step = 0
+# Initialize the environment and get it's state
+state, info = env.reset()
+for t in count():
     if record_video and (i_episode % 100 == 0):
         env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
+
     state = torch.tensor(state.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
-    for t in count():
-        action = select_action(state)
-        observation, reward, terminated, truncated, info = env.step(action.item())
-        if record_video and (i_episode % 100 == 0):
-            env.render()
+    action = select_action(state)
+    observation, reward, terminated, truncated, info = env.step(action.item())
+    if record_video and (i_episode % 100 == 0):
+        env.render()
 
-        reward = torch.tensor([reward], device=device)
-        done = terminated or truncated
+    step+=1
 
-        episode_reward += reward.item()
-        ttc_x.append(abs(info['ttc_x']))
-        ttc_y.append(abs(info['ttc_y']))
-        x_dist.append(abs(info['dx']))
-        y_dist.append(abs(info['dy']))
-        x_vel.append(abs(info['dvx']))
-        y_vel.append(abs(info['dvy']))
-        num_crashes.append(float(info['crashed']))
+    reward = torch.tensor([reward], device=device)
+    done = terminated or truncated
 
-        if terminated:
-            next_state = None
-        else:
-            next_state = torch.tensor(observation.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
+    episode_reward += reward.item()
+    ttc_x.append(abs(info['ttc_x']))
+    ttc_y.append(abs(info['ttc_y']))
+    x_dist.append(abs(info['dx']))
+    y_dist.append(abs(info['dy']))
+    x_vel.append(abs(info['dvx']))
+    y_vel.append(abs(info['dvy']))
+    num_crashes.append(float(info['crashed']))
 
-        # Store the transition in memory
-        memory.push(state, action, next_state, reward)
+    if terminated:
+        next_state = None
+    else:
+        next_state = torch.tensor(observation.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
 
-        # Move to the next state
-        state = next_state
+    # Store the transition in memory
+    memory.push(state, action, next_state, reward)
 
-        # Perform one step of the optimization (on the policy network)
-        optimize_model()
+    # Move to the next state
+    state = next_state
 
-        # Soft update of the target network's weights
-        # θ′ ← τ θ + (1 −τ )θ′
-        target_net_state_dict = target_net.state_dict()
-        policy_net_state_dict = policy_net.state_dict()
-        for key in policy_net_state_dict:
-            target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
-        target_net.load_state_dict(target_net_state_dict)
+    # Perform one step of the optimization (on the policy network)
+    optimize_model()
 
-        if save_model and (i_episode%save_every == 0 and i_episode > 0):
-            torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(i_episode))
+    # Soft update of the target network's weights
+    # θ′ ← τ θ + (1 −τ )θ′
+    target_net_state_dict = target_net.state_dict()
+    policy_net_state_dict = policy_net.state_dict()
+    for key in policy_net_state_dict:
+        target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
+    target_net.load_state_dict(target_net_state_dict)
 
+    if save_model and (i_episode%save_every == 0 and i_episode > 0):
+        torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(i_episode))
+
+    if wlog:
+        logging.info("Episode:{},Step:{},Observations:{},Actions:{},Reward:{},Done:{},Info:{}".format(i_episode, step, np.asarray(observation), action, reward, done, info))
+
+    if done:
+        episode_rewards.append(episode_reward)
+        episode_crashes.append(float(info['crashed']))
+        # plot_durations()
         if wlog:
-            logging.info("Episode:{},Step:{},Observations:{},Actions:{},Reward:{},Done:{},Info:{}".format(i_episode, t, np.asarray(observation), action, reward, done, info))
-
-        if done:
-            episode_rewards.append(episode_reward)
-            # plot_durations()
-            if wlog:
-                wandb.log({"train/reward": episode_reward, \
-                           "train/duration": t+1, \
-                           "train/success_rate": sum(num_crashes)/(i_episode+1), \
-                           "train/sr_100": sum(num_crashes[-100:])/(100), \
-                           "train/num_crashes": sum(num_crashes),\
-                           "train/min_ttcx": min(ttc_x), \
-                           "train/min_ttcy": min(ttc_y), \
-                           "train/min_x_dist": min(x_dist), \
-                           "train/min_y_dist": min(y_dist), \
-                           "train/min_x_vel": min(x_vel), \
-                           "train/min_y_vel": min(y_vel)})
-            break
+            wandb.log({"train/reward": episode_reward, \
+                    "train/duration": step+1, \
+                    "train/success_rate": sum(num_crashes)/(i_episode+1), \
+                    "train/sr_100": sum(episode_crashes[-100:])/(100), \
+                    "train/num_crashes": sum(num_crashes),\
+                    "train/min_ttcx": min(ttc_x), \
+                    "train/min_ttcy": min(ttc_y), \
+                    "train/min_x_dist": min(x_dist), \
+                    "train/min_y_dist": min(y_dist), \
+                    "train/min_x_vel": min(x_vel), \
+                    "train/min_y_vel": min(y_vel)})
+        step=0
+        i_episode +=1     
+        episode_reward = 0
+        x_dist = []
+        y_dist = []
+        x_vel = []
+        y_vel = []
+        ttc_x = []
+        ttc_y = []
+        # Initialize the environment and get it's state
+        state, info = env.reset()
+    if t > max_steps:
+        break
 
 if save_model:
     torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(len(episode_rewards)))
