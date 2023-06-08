@@ -26,12 +26,12 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-wlog = False
+wlog = True
 save_model = False
 record_video = False
 save_every = 1000
 
-num_workers = 16
+num_workers = 2
 
 num_episodes = 1000
 collision_coefficient = 400
@@ -39,10 +39,10 @@ ttc_x_coefficient = 4
 ttc_y_coefficient = 1
 
 spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
-num_configs = 8
+num_configs = 5
 
-spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
-num_configs = 3
+# spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
+# num_configs = 3
 
 if wlog:
     wandb.init(
@@ -72,17 +72,17 @@ env_config = {
         "type": "DiscreteMetaAction",
         "target_speeds": list(range(15,35))
     },
-    # "lanes_count" : 2,
-    # "vehicles_count" : 1,
-    # "duration" : 100,
-    # "initial_lane_id" : None,
-    # "mean_distance": 20,
-    # "mean_delta_v": 0,
-    # "policy_frequency": 1,
-    # "collision_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
-    # "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
-    # "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
-    # "spawn_configs": spawn_configs[:num_configs]
+    "lanes_count" : 2,
+    "vehicles_count" : 1,
+    "duration" : 100,
+    "initial_lane_id" : None,
+    "mean_distance": 20,
+    "mean_delta_v": 0,
+    "policy_frequency": 1,
+    "collision_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
+    "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
+    "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
+    "spawn_configs": spawn_configs[:num_configs]
 }
 env = gym.make('crash-v0', render_mode='rgb_array')
 if record_video:
@@ -95,8 +95,8 @@ if record_video:
                                         episode_trigger=lambda e: e % 100 == 0)
     ])
 else:
-    # env = gym.vector.make('crash-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
-    env = gym.vector.make('highway-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
+    env = gym.vector.make('crash-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
+    # env = gym.vector.make('highway-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
 
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
@@ -106,6 +106,7 @@ if is_ipython:
 plt.ion()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cpu")
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -254,9 +255,10 @@ def optimize_model():
 #     num_episodes = 1000
 # else:
 #     num_episodes = 100
-
+num_crashes = []
 i_episode = 0
-episode_reward = 0
+episode_rewards = np.zeros(num_workers)
+duration = np.zeros(num_workers)
 ttc_x = 0
 ttc_y = 0
 state, info = env.reset()
@@ -264,7 +266,7 @@ if record_video and (i_episode % 100 == 0):
     env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
 state = torch.tensor(state.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
 
-max_steps = 10000
+max_steps = 1e7
 t_step = 0
 with tqdm(total=max_steps) as pbar:
     while(True):
@@ -294,6 +296,9 @@ with tqdm(total=max_steps) as pbar:
 
         state = next_state
 
+        episode_rewards = episode_rewards + reward.numpy()
+        duration = duration + np.ones(num_workers)
+
         # Perform one step of the optimization (on the policy network)
         optimize_model()
 
@@ -310,7 +315,16 @@ with tqdm(total=max_steps) as pbar:
 
         for worker in range(num_workers):
             if done[worker]:
+                num_crashes.append(float(info['final_info'][worker]['crashed']))
                 i_episode += 1
+                if wlog:
+                    wandb.log({"train/reward": episode_rewards[worker],
+                               "train/num_crashes": sum(num_crashes),
+                               "train/duration" : duration[worker],
+                               "train/sr_100": sum(num_crashes[-100:])/100})
+                episode_rewards[worker] = 0
+                duration[worker] = 0
+
             t_step += 1
             pbar.update(1)
 
