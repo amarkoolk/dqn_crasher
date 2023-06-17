@@ -14,10 +14,13 @@ import warnings
 warnings.filterwarnings("ignore", message="divide by zero encountered in double_scalars")
 warnings.filterwarnings("ignore", message="invalid value encountered in double_scalars")
 warnings.filterwarnings("ignore", message="overflow encountered in exp")
-import numpy as np
+warnings.filterwarnings("ignore", message="divide by zero encountered in scalar divide")
+warnings.filterwarnings("ignore", message="invalid value encountered in scalar divide")
 
 import argparse
 from dqn import DQN
+
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -38,8 +41,6 @@ parser.add_argument('--max-steps', type=int, default=int(1e8),
                     help='maximum number of training steps in total')
 parser.add_argument('--cuda', type=bool, default=True,
                     help='Add cuda')
-parser.add_argument('--entropy-coef', type=float, default=0.01,
-                    help='Entropy coefficient to encourage exploration.')
 
 # SPECIFIC DQN PARAMETERS  
 parser.add_argument('--batch-size', type=int, default=128,
@@ -74,14 +75,15 @@ parser.add_argument('--seed', type=int, default=0,
 args = parser.parse_args()
 
 wlog = True
-save_model = True
-record_video = True
+save_model = False
+record_video = False
 save_every = 1000
 
 max_steps = args.max_steps
 collision_coefficient = args.collision_coefficient
 ttc_x_coefficient = args.ttc_x_coefficient
 ttc_y_coefficient = args.ttc_y_coefficient
+num_workers = args.num_workers
 
 spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
 num_configs = 8
@@ -156,11 +158,18 @@ env_config = {
     "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
     "spawn_configs": spawn_configs[:num_configs]
 }
-env = gym.make('crash-v0', render_mode='rgb_array')
+
 if record_video:
-    env = RecordVideo(env, video_folder = wandb.run.dir + '/video', episode_trigger=lambda e: e % 100 == 0)
-    env.unwrapped.set_record_video_wrapper(env)
-env.configure(env_config)
+    env = gym.vector.AsyncVectorEnv([
+        lambda: RecordVideo(gym.make('crash-v0', config = env_config, render_mode='rgb_array'), \
+                                        video_folder = './video', \
+                                        episode_trigger=lambda e: e % 100 == 0),
+        lambda: RecordVideo(gym.make('crash-v0', config = env_config, render_mode='rgb_array'), \
+                                        video_folder = './video', \
+                                        episode_trigger=lambda e: e % 100 == 0)
+    ])
+else:
+    env = gym.vector.make('crash-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
 
 # set up matplotlib
 is_ipython = 'inline' in matplotlib.get_backend()
@@ -169,7 +178,7 @@ if is_ipython:
 
 plt.ion()
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if (torch.cuda.is_available() and args.cuda)  else "cpu")
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -193,10 +202,10 @@ class ReplayMemory(object):
 
 
 # Get number of actions from gym action space
-n_actions = env.action_space.n
+n_actions = env.action_space.nvec[0]
 # Get the number of state observations
 state, info = env.reset()
-n_observations = len(state.flatten())
+n_observations = len(state[0].flatten())
 
 policy_net = DQN(n_observations, n_actions, hidden_dim).to(device)
 target_net = DQN(n_observations, n_actions, hidden_dim).to(device)
@@ -220,9 +229,10 @@ def select_action(state):
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
-            return policy_net(state).max(1)[1].view(1, 1)
+            return policy_net(state).max(1)[1].view(num_workers, 1)
     else:
-        return torch.tensor([[env.action_space.sample()]], device=device, dtype=torch.long)
+        # print('Action Space: {}'.format(torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long).shape))
+        return torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long)
 
 
 episode_durations = []
@@ -287,11 +297,11 @@ def optimize_model():
     with torch.no_grad():
         next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
     # Compute the expected Q values
-    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+    expected_state_action_values = (next_state_values.unsqueeze(1) * GAMMA) + reward_batch
 
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
-    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+    loss = criterion(state_action_values, expected_state_action_values)
 
     # Optimize the model
     optimizer.zero_grad()
@@ -304,54 +314,43 @@ def optimize_model():
 #     num_episodes = 1000
 # else:
 #     num_episodes = 100
-
 num_crashes = []
-episode_crashes = []
-i_episode = 0     
-episode_reward = 0
-x_dist = []
-y_dist = []
-x_vel = []
-y_vel = []
-ttc_x = []
-ttc_y = []
-step = 0
-# Initialize the environment and get it's state
+i_episode = 0
+episode_rewards = np.zeros(num_workers)
+duration = np.zeros(num_workers)
+ttc_x = 0
+ttc_y = 0
 state, info = env.reset()
-for t in count():
-    if record_video and (i_episode % 100 == 0):
-        env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
+if record_video and (i_episode % 100 == 0):
+    env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
+state = torch.tensor(state.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
 
-    state = torch.tensor(state.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
-    action = select_action(state)
-    observation, reward, terminated, truncated, info = env.step(action.item())
-    if record_video and (i_episode % 100 == 0):
-        env.render()
+max_steps = 1e7
+t_step = 0
+with tqdm(total=max_steps) as pbar:
+    while(True):
+        action = torch.squeeze(select_action(state))
+        observation, reward, terminated, truncated, info = env.step(action.cpu().numpy())
+        if record_video and (i_episode % 100 == 0):
+            env.render()
 
-    step+=1
+        reward = torch.tensor(reward, device=device)
+        done = terminated | truncated
 
-    reward = torch.tensor([reward], device=device)
-    done = terminated or truncated
+        next_state = torch.tensor(observation.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
+        for worker in range(num_workers):
+            if terminated[worker]:
+                memory.push(state[worker].view(1,n_observations),action[worker].view(1,1),None,reward[worker].view(1,1))
+            else:
+                memory.push(state[worker].view(1,n_observations),action[worker].view(1,1),next_state[worker].view(1,n_observations),reward[worker].view(1,1))
 
-    episode_reward += reward.item()
-    ttc_x.append(abs(info['ttc_x']))
-    ttc_y.append(abs(info['ttc_y']))
-    x_dist.append(abs(info['dx']))
-    y_dist.append(abs(info['dy']))
-    x_vel.append(abs(info['dvx']))
-    y_vel.append(abs(info['dvy']))
-    num_crashes.append(float(info['crashed']))
+        state = next_state
 
-    if terminated:
-        next_state = None
-    else:
-        next_state = torch.tensor(observation.flatten(), dtype=torch.float32, device=device).unsqueeze(0)
+        episode_rewards = episode_rewards + reward.cpu().numpy()
+        duration = duration + np.ones(num_workers)
 
-    # Store the transition in memory
-    memory.push(state, action, next_state, reward)
-
-    # Move to the next state
-    state = next_state
+        # Perform one step of the optimization (on the policy network)
+        optimize_model()
 
     # Perform one step of the optimization (on the policy network)
     optimize_model()
@@ -364,40 +363,22 @@ for t in count():
         target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
     target_net.load_state_dict(target_net_state_dict)
 
-    if save_model and (i_episode%save_every == 0 and i_episode > 0):
-        torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(i_episode))
+    for worker in range(num_workers):
+        if done[worker]:
+            num_crashes.append(float(info['final_info'][worker]['crashed']))
+            i_episode += 1
+            if wlog:
+                wandb.log({"train/reward": episode_rewards[worker],
+                            "train/num_crashes": sum(num_crashes),
+                            "train/duration" : duration[worker],
+                            "train/sr_100": sum(num_crashes[-100:])/100})
+            episode_rewards[worker] = 0
+            duration[worker] = 0
 
-    if wlog:
-        logging.info("Episode:{},Step:{},Observations:{},Actions:{},Reward:{},Done:{},Info:{}".format(i_episode, step, np.asarray(observation), action, reward, done, info))
+        t_step += 1
+        pbar.update(1)
 
-    if done:
-        episode_rewards.append(episode_reward)
-        episode_crashes.append(float(info['crashed']))
-        # plot_durations()
-        if wlog:
-            wandb.log({"train/reward": episode_reward, \
-                    "train/duration": step+1, \
-                    "train/success_rate": sum(num_crashes)/(i_episode+1), \
-                    "train/sr_100": sum(episode_crashes[-100:])/(100), \
-                    "train/num_crashes": sum(num_crashes),\
-                    "train/min_ttcx": min(ttc_x), \
-                    "train/min_ttcy": min(ttc_y), \
-                    "train/min_x_dist": min(x_dist), \
-                    "train/min_y_dist": min(y_dist), \
-                    "train/min_x_vel": min(x_vel), \
-                    "train/min_y_vel": min(y_vel)})
-        step=0
-        i_episode +=1     
-        episode_reward = 0
-        x_dist = []
-        y_dist = []
-        x_vel = []
-        y_vel = []
-        ttc_x = []
-        ttc_y = []
-        # Initialize the environment and get it's state
-        state, info = env.reset()
-    if t > max_steps:
+    if t_step >= max_steps:
         break
 
 if save_model:
