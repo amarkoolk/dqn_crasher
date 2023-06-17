@@ -31,7 +31,7 @@ save_model = False
 record_video = False
 save_every = 1000
 
-num_workers = 2
+num_workers = 40
 
 num_episodes = 1000
 collision_coefficient = 400
@@ -39,7 +39,7 @@ ttc_x_coefficient = 4
 ttc_y_coefficient = 1
 
 spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
-num_configs = 5
+num_configs = 8
 
 # spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
 # num_configs = 3
@@ -106,7 +106,6 @@ if is_ipython:
 plt.ion()
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-device = torch.device("cpu")
 
 Transition = namedtuple('Transition',
                         ('state', 'action', 'next_state', 'reward'))
@@ -238,11 +237,11 @@ def optimize_model():
     with torch.no_grad():
         next_state_values[non_final_mask] = target_net(non_final_next_states).max(1)[0]
     # Compute the expected Q values
-    expected_state_action_values = (next_state_values * GAMMA) + reward_batch
+    expected_state_action_values = (next_state_values.unsqueeze(1) * GAMMA) + reward_batch
 
     # Compute Huber loss
     criterion = nn.SmoothL1Loss()
-    loss = criterion(state_action_values, expected_state_action_values.unsqueeze(1))
+    loss = criterion(state_action_values, expected_state_action_values)
 
     # Optimize the model
     optimizer.zero_grad()
@@ -271,7 +270,7 @@ t_step = 0
 with tqdm(total=max_steps) as pbar:
     while(True):
         action = torch.squeeze(select_action(state))
-        observation, reward, terminated, truncated, info = env.step(action)
+        observation, reward, terminated, truncated, info = env.step(action.cpu().numpy())
         if record_video and (i_episode % 100 == 0):
             env.render()
 
@@ -296,7 +295,7 @@ with tqdm(total=max_steps) as pbar:
 
         state = next_state
 
-        episode_rewards = episode_rewards + reward.numpy()
+        episode_rewards = episode_rewards + reward.cpu().numpy()
         duration = duration + np.ones(num_workers)
 
         # Perform one step of the optimization (on the policy network)
