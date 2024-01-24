@@ -1,0 +1,28 @@
+#!/bin/bash
+
+#SBATCH --job-name="dqn_crasher_1-1-1"
+#SBATCH --error="dqn_crasher_1-1-1.err"
+#SBATCH --output="dqn_crasher_1-1-1.output"
+
+
+# Auto Load Modules
+
+### Load module and activate conda env
+module load anaconda3-2022.05
+source /sw/ubuntu-22.04/anaconda3/2022.05/etc/profile.d/conda.sh 
+conda activate crash
+# wandb login 5594aaa85da885e6362c7e20f2138cc432357ddd
+CERT1=/etc/ssl/certs/ca-bundle.crt
+CERT2=/etc/ssl/certs/ca-certificates.crt
+if test -f "$CERT1"; then
+    CERT=$CERT1
+elif test -f "$CERT2"; then
+    CERT=$CERT2
+fi
+export CURL_CA_BUNDLE=$CERT
+export CA_REQUESTS_BUNDLE=$CERT
+export GIT_SSL_CAINFO=$CERT
+export REQUESTS_CA_BUNDLE=$CERT
+export WEBSOCKET_CLIENT_CA_BUNDLE=$CERT
+cd ~/rl_crash_course/src/dqn_crasher
+python run_training.py --max-steps 10000000 --collision-coefficient 1 --ttc-x-coefficient 1 --ttc-y-coefficient 1 
