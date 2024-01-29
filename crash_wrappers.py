@@ -9,29 +9,28 @@ import matplotlib.pyplot as plt
 
 class CrashResetWrapper(Wrapper):
     
-    def __init__(self, env, cfg : dict):
+    def __init__(self, env):
         super().__init__(env)
-        self.cfg = cfg
 
     def _reset(self) -> None:
 
         # Create Road Environment
-        lane_count = self.get_wrapper_attr('config')['lanes_count']
-        show_traj  = self.get_wrapper_attr('config')['show_trajectories']
+        lane_count = self.unwrapped.config['lanes_count']
+        show_traj  = self.unwrapped.config['show_trajectories']
 
         self.road = Road(network=RoadNetwork.straight_road_network(lane_count, speed_limit=30),
                         np_random=self.get_wrapper_attr('np_random'), record_history=show_traj)
         
         # Create Road Vehicles
 
-        other_vehicles_type = utils.class_from_path(self.config["other_vehicles_type"])
+        other_vehicles_type = utils.class_from_path(self.unwrapped.config["other_vehicles_type"])
 
-        spawn_configs = self.cfg['spawn_configs']
+        spawn_configs = self.unwrapped.config['spawn_configs']
         spawn_config = self.get_wrapper_attr('np_random').choice(spawn_configs)
-        spawn_distance = self.get_wrapper_attr('np_random').normal(self.cfg["mean_distance"], self.cfg["mean_distance"]/10)
-        starting_vel = self.cfg["initial_speed"]+self.get_wrapper_attr('np_random').normal(self.cfg["mean_delta_v"], 5)
+        spawn_distance = self.get_wrapper_attr('np_random').normal(self.unwrapped.config["mean_distance"], self.unwrapped.config["mean_distance"]/10)
+        starting_vel = self.unwrapped.config["initial_speed"]+self.get_wrapper_attr('np_random').normal(self.unwrapped.config["mean_delta_v"], 5)
         self.controlled_vehicles = []
-        for _ in range(self.get_wrapper_attr('config')["ego_vehicles"]):
+        for _ in range(self.unwrapped.config["ego_vehicles"]):
             # Behind Left
             if spawn_config == 'behind_left':
                 lane1 = self.road.network.graph['0']['1'][0]
@@ -166,9 +165,8 @@ class CrashResetWrapper(Wrapper):
 
 class CrashRewardWrapper(RewardWrapper):
 
-    def __init__(self, env, cfg : dict):
+    def __init__(self, env):
         super().__init__(env)
-        self.cfg = cfg
 
 
     def reward(self, reward):
@@ -191,9 +189,9 @@ class CrashRewardWrapper(RewardWrapper):
         ttc_y = dy/dvy if abs(dvy) > 1e-6 else dy/1e-6
 
         # Calculate Rewards
-        if abs(dvx) < self.cfg["tolerance"]:
-            if abs(dx) < self.cfg["tolerance"]:
-                r_x = self.cfg['ttc_x_reward']
+        if abs(dvx) < self.unwrapped.config["tolerance"]:
+            if abs(dx) < self.unwrapped.config["tolerance"]:
+                r_x = self.unwrapped.config['ttc_x_reward']
             else:
                 r_x = 0
         else:
@@ -202,9 +200,9 @@ class CrashRewardWrapper(RewardWrapper):
             except OverflowError:
                 r_x = 0.0
         
-        if abs(dvy) < self.cfg["tolerance"]:
-            if abs(dy) < self.cfg["tolerance"]:
-                r_y = self.cfg['ttc_y_reward']
+        if abs(dvy) < self.unwrapped.config["tolerance"]:
+            if abs(dy) < self.unwrapped.config["tolerance"]:
+                r_y = self.unwrapped.config['ttc_y_reward']
             else:
                 r_y = 0
         else:
@@ -215,4 +213,4 @@ class CrashRewardWrapper(RewardWrapper):
 
         crashed = self.get_wrapper_attr('vehicle').crashed
 
-        return r_x + r_y + float(crashed) * self.cfg['crash_reward']
+        return r_x + r_y + float(crashed) * self.unwrapped.config['crash_reward']

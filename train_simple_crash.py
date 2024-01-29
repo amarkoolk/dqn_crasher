@@ -1,50 +1,76 @@
 import wandb
 import gymnasium as gym
-from gymnasium import logger
-from gymnasium.wrappers.record_video import RecordVideo
-from crash_wrappers import CrashRewardWrapper
 
 import tyro
-from arguments import Args
-from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
-
 import math
 import random
-import matplotlib
-from matplotlib import pyplot as plt
-from itertools import count
-from tqdm import tqdm
-import logging
-import warnings
-
-import argparse
-from dqn import DQN
-
 import numpy as np
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+from arguments import Args
+from crash_wrappers import CrashRewardWrapper, CrashResetWrapper
+from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
+from create_env import make_vector_env
+from models import DQN
+
+# from itertools import count
+# import warnings
+
+
+
+
 if __name__ == "__main__":
+    # Parse command line arguments
     args = tyro.cli(Args)
+    print(args)
+    
+    # Check Argument Inputs
+    assert args.num_envs > 0
+    assert args.total_timesteps > 0
+    assert args.learning_rate > 0
+    assert args.buffer_size > 0
+    assert args.gamma > 0
+    assert args.tau > 0
+    assert args.batch_size > 0
+    assert args.start_e > 0
+    assert args.buffer_type in ["ER", "PER", "HER"]
+    assert args.model_type in ["DQN"]
 
-    # wlog = args.wandb
-    # save_model = False
-    # record_video = False
-    # save_every = 1000
+    assert args.max_duration > 0
 
-    # max_steps = args.max_steps
-    # collision_coefficient = args.collision_coefficient
-    # ttc_x_coefficient = args.ttc_x_coefficient
-    # ttc_y_coefficient = args.ttc_y_coefficient
-    # num_workers = args.num_workers
+    if args.buffer_type == "HER":
+        raise NotImplementedError("HER is not implemented yet")
 
-    spawn_configs =  ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center']
-    num_configs = 8
-    # spawn_configs =  ['forward_left', 'forward_right', 'forward_center']
-    # num_configs = 3
+    # Use wandb to log training runs
+    if args.track:
+        wandb.init(
+            # set the wandb project where this run will be logged
+            project="rl-crash-course",
+            
+            # track hyperparameters and run metadata
+            config={
+            "learning_rate": args.learning_rate,
+            "architecture": args.model_type,
+            "max_duration": args.max_duration,
+            "dataset": "Highway-Env",
+            "max_steps": args.total_timesteps,
+            "collision_reward": args.crash_reward,
+            "ttc_x_reward": args.ttc_x_reward,
+            "ttc_y_reward": args.ttc_y_reward,
+            "BATCH_SIZE": args.batch_size,
+            "GAMMA": args.gamma,
+            "EPS_START": args.start_e,
+            "EPS_END": args.end_e,
+            "EPS_DECAY": args.decay_e,
+            "TAU": args.tau,
+            "ReplayBuffer": args.buffer_type
+            }
+        )
 
     # BATCH_SIZE is the number of transitions sampled from the replay buffer
     # GAMMA is the discount factor as mentioned in the previous section
@@ -55,43 +81,12 @@ if __name__ == "__main__":
     # LR is the learning rate of the ``AdamW`` optimizer
     BATCH_SIZE = args.batch_size
     GAMMA = args.gamma
-    EPS_START = args.eps_start
-    EPS_END = args.eps_end
-    EPS_DECAY = args.eps_decay
+    EPS_START = args.start_e
+    EPS_END = args.end_e
+    EPS_DECAY = args.decay_e
     TAU = args.tau
-    LR = args.lr
-    ReplayBuffer = args.replay_buffer
+    LR = args.learning_rate
 
-    hidden_dim = args.hidden_dim
-
-    if wlog:
-        wandb.init(
-            # set the wandb project where this run will be logged
-            project="rl-crash-course",
-            
-            # track hyperparameters and run metadata
-            config={
-            "learning_rate": LR,
-            "architecture": "DQN",
-            "max_duration": 100,
-            "dataset": "Highway-Env",
-            "max_steps": max_steps,
-            "collision_reward": collision_coefficient,
-            "ttc_x_reward": ttc_x_coefficient,
-            "ttc_y_reward": ttc_y_coefficient,
-            "num_configs": num_configs,
-            "BATCH_SIZE": BATCH_SIZE,
-            "GAMMA": GAMMA,
-            "EPS_START": EPS_START,
-            "EPS_END": EPS_END,
-            "EPS_DECAY": EPS_DECAY,
-            "TAU": TAU,
-            "hidden_dim": hidden_dim,
-            "ReplayBuffer": ReplayBuffer
-            }
-        )
-
-        logging.basicConfig(filename=wandb.run.dir + '/episode_rollouts.log', level=logging.INFO)
 
     env_config = {
         "observation": {
@@ -104,75 +99,47 @@ if __name__ == "__main__":
         },
         "lanes_count" : 2,
         "vehicles_count" : 1,
-        "duration" : 100,
+        "duration" : args.max_duration,
         "initial_lane_id" : None,
-        # "mean_distance": 20,
-        # "mean_delta_v": 0,
         "policy_frequency": 1,
-        # "spawn_configs": spawn_configs[:num_configs]
+        # Reset Configs
+        'spawn_configs' : ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center'],
+        'mean_distance' : 20,
+        'initial_speed' : 20,
+        'mean_delta_v' : 0,
+        # Crash Configs
+        'ttc_x_reward' : args.ttc_x_reward,
+        'ttc_y_reward' : args.ttc_y_reward,
+        'crash_reward' : args.crash_reward,
+        'tolerance' : 1e-3
     }
 
-    if num_workers == 1:
-        env = gym.make(args.env_name, render_mode='rgb_array')
-        if args.adversarial_reward:
-            collision_config = {
-                "tolerance": 1e-6,   # The tolerance to a velocity difference
-                "crash_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
-                "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
-                "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
-            }
-            env = CrashRewardWrapper(env, collision_config)
-        if record_video:
-            env = RecordVideo(env, video_folder = wandb.run.dir + '/video', episode_trigger=lambda e: e % 100 == 0)
-            env.unwrapped.set_record_video_wrapper(env)
-        env.configure(env_config)
+    # Create Vector Env with Adversarial Rewards
+    env = make_vector_env(env_config, num_envs = args.num_envs, adversarial = args.adversarial)
+
+
+    if args.cuda:
+        device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
+    elif args.metal:
+        device = torch.device("mps" if torch.backends.mps.is_available()  else "cpu")
     else:
-        if record_video:
-            env = gym.vector.AsyncVectorEnv([
-                lambda: RecordVideo(gym.make('highway-v0', config = env_config, render_mode='rgb_array'), \
-                                                video_folder = './video', \
-                                                episode_trigger=lambda e: e % 100 == 0)
-            ])
-        else:
-            env = gym.vector.make('highway-v0', num_envs = num_workers, config = env_config, render_mode='rgb_array')
-
-        if args.adversarial_reward:
-            collision_config = {
-                "tolerance": 1e-6,   # The tolerance to a velocity difference
-                "crash_reward": collision_coefficient,    # The reward received when colliding with a vehicle.
-                "ttc_x_reward": ttc_x_coefficient,  # The reward range for time to collision in the x direction with the ego vehicle.
-                "ttc_y_reward": ttc_y_coefficient,  # The reward range for time to collision in the y direction with the ego vehicle.
-            }
-            env = CrashRewardWrapper(env, collision_config)
-
-
-    # set up matplotlib
-    is_ipython = 'inline' in matplotlib.get_backend()
-    if is_ipython:
-        from IPython import display
-
-    plt.ion()
-
-    device = torch.device("cuda" if (torch.cuda.is_available() and args.cuda)  else "cpu")
-
-
+        device = torch.device("cpu")
 
     # Get number of actions from gym action space
-    n_actions = env.action_space.nvec[0]
+    n_actions = env.single_action_space.n
     # Get the number of state observations
     state, info = env.reset()
     n_observations = len(state[0].flatten())
 
-    policy_net = DQN(n_observations, n_actions, hidden_dim).to(device)
-    target_net = DQN(n_observations, n_actions, hidden_dim).to(device)
+    policy_net = DQN(n_observations, n_actions).to(device)
+    target_net = DQN(n_observations, n_actions).to(device)
     target_net.load_state_dict(policy_net.state_dict())
 
     optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
-    memory = ReplayMemory(ReplayBuffer)
+    memory = ReplayMemory(args.buffer_size)
 
 
     steps_done = 0
-
 
     def select_action(state):
         global steps_done
@@ -185,40 +152,10 @@ if __name__ == "__main__":
                 # t.max(1) will return the largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
-                return policy_net(state).max(1)[1].view(num_workers, 1)
+                return policy_net(state).max(1)[1].view(args.num_envs, 1)
         else:
             # print('Action Space: {}'.format(torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long).shape))
             return torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long)
-
-
-    episode_durations = []
-    episode_rewards = []
-
-
-    def plot_durations(show_result=False):
-        plt.figure(1)
-        durations_t = torch.tensor(episode_rewards, dtype=torch.float)
-        if show_result:
-            plt.title('Result')
-        else:
-            plt.clf()
-            plt.title('Training...')
-        plt.xlabel('Episode')
-        plt.ylabel('Reward')
-        plt.plot(durations_t.numpy())
-        # Take 100 episode averages and plot them too
-        if len(durations_t) >= 100:
-            means = durations_t.unfold(0, 100, 1).mean(1).view(-1)
-            means = torch.cat((torch.zeros(99), means))
-            plt.plot(means.numpy())
-
-        plt.pause(0.001)  # pause a bit so that plots are updated
-        if is_ipython:
-            if not show_result:
-                display.display(plt.gcf())
-                display.clear_output(wait=True)
-            else:
-                display.display(plt.gcf())
 
     def optimize_model():
         if len(memory) < BATCH_SIZE:
@@ -272,14 +209,12 @@ if __name__ == "__main__":
     #     num_episodes = 100
     num_crashes = []
     i_episode = 0
-    episode_rewards = np.zeros(num_workers)
-    duration = np.zeros(num_workers)
+    episode_rewards = np.zeros(args.num_envs)
+    duration = np.zeros(args.num_envs)
     ttc_x = 0
     ttc_y = 0
     state, info = env.reset()
-    if record_video and (i_episode % 100 == 0):
-        env.unwrapped.automatic_rendering_callback = env.video_recorder.capture_frame
-    state = torch.tensor(state.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
+    state = torch.tensor(state.reshape(args.num_envs,n_observations), dtype=torch.float32, device=device)
 
     max_steps = 1e7
     t_step = 0
@@ -287,14 +222,12 @@ if __name__ == "__main__":
         while(True):
             action = torch.squeeze(select_action(state))
             observation, reward, terminated, truncated, info = env.step(action.cpu().numpy())
-            if record_video and (i_episode % 100 == 0):
-                env.render()
 
             reward = torch.tensor(reward, device=device)
             done = terminated | truncated
 
-            next_state = torch.tensor(observation.reshape(num_workers,n_observations), dtype=torch.float32, device=device)
-            for worker in range(num_workers):
+            next_state = torch.tensor(observation.reshape(args.num_envs,n_observations), dtype=torch.float32, device=device)
+            for worker in range(args.num_envs):
                 if terminated[worker]:
                     memory.push(state[worker].view(1,n_observations),action[worker].view(1,1),None,reward[worker].view(1,1))
                 else:
@@ -303,7 +236,7 @@ if __name__ == "__main__":
             state = next_state
 
             episode_rewards = episode_rewards + reward.cpu().numpy()
-            duration = duration + np.ones(num_workers)
+            duration = duration + np.ones(args.num_envs)
 
             # Perform one step of the optimization (on the policy network)
             optimize_model()
@@ -316,11 +249,11 @@ if __name__ == "__main__":
                 target_net_state_dict[key] = policy_net_state_dict[key]*TAU + target_net_state_dict[key]*(1-TAU)
             target_net.load_state_dict(target_net_state_dict)
 
-            for worker in range(num_workers):
+            for worker in range(args.num_envs):
                 if done[worker]:
                     num_crashes.append(float(info['final_info'][worker]['crashed']))
                     i_episode += 1
-                    if wlog:
+                    if args.track:
                         wandb.log({"train/reward": episode_rewards[worker],
                                     "train/num_crashes": sum(num_crashes),
                                     "train/duration" : duration[worker],
@@ -334,8 +267,8 @@ if __name__ == "__main__":
             if t_step >= max_steps:
                 break
 
-        if save_model:
-            torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(len(episode_rewards)))
+        # if save_model:
+        #     torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(len(episode_rewards)))
 
     print('Complete')
     env.close()
