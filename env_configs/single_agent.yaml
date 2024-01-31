@@ -1,0 +1,32 @@
+action:
+  target_speeds:
+  - 15
+  - 16
+  - 17
+  - 18
+  - 19
+  - 20
+  - 21
+  - 22
+  - 23
+  - 24
+  - 25
+  - 26
+  - 27
+  - 28
+  - 29
+  - 30
+  - 31
+  - 32
+  - 33
+  - 34
+  type: DiscreteMetaAction
+duration: 40
+initial_lane_id: null
+initial_speed: 20
+lanes_count: 2
+observation:
+  normalize: false
+  type: Kinematics
+policy_frequency: 1
+vehicles_count: 1

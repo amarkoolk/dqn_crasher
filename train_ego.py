@@ -18,6 +18,8 @@ from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 from create_env import make_vector_env
 from models import DQN
 
+
+
 # from itertools import count
 # import warnings
 
@@ -50,7 +52,7 @@ if __name__ == "__main__":
     if args.track:
         wandb.init(
             # set the wandb project where this run will be logged
-            project="rl-crash-course",
+            project="rl_crash_course",
             
             # track hyperparameters and run metadata
             config={
@@ -136,7 +138,10 @@ if __name__ == "__main__":
     target_net.load_state_dict(policy_net.state_dict())
 
     optimizer = optim.AdamW(policy_net.parameters(), lr=LR, amsgrad=True)
-    memory = ReplayMemory(args.buffer_size)
+    if args.buffer_type == "ER":
+        memory = ReplayMemory(args.buffer_size)
+    elif args.buffer_type == "PER":
+        memory = PrioritizedExperienceReplay(args.buffer_size)
 
 
     steps_done = 0
@@ -216,8 +221,11 @@ if __name__ == "__main__":
     state, info = env.reset()
     state = torch.tensor(state.reshape(args.num_envs,n_observations), dtype=torch.float32, device=device)
 
-    max_steps = 1e7
+    max_steps = args.total_timesteps
     t_step = 0
+
+    ep_rew_mean = np.zeros(0)
+    ep_len_mean = np.zeros(0)
     with tqdm(total=max_steps) as pbar:
         while(True):
             action = torch.squeeze(select_action(state))
@@ -254,10 +262,19 @@ if __name__ == "__main__":
                     num_crashes.append(float(info['final_info'][worker]['crashed']))
                     i_episode += 1
                     if args.track:
-                        wandb.log({"train/reward": episode_rewards[worker],
-                                    "train/num_crashes": sum(num_crashes),
-                                    "train/duration" : duration[worker],
-                                    "train/sr_100": sum(num_crashes[-100:])/100})
+                        ep_rew_mean = np.append(ep_rew_mean, episode_rewards[worker])
+                        ep_len_mean = np.append(ep_len_mean, duration[worker])
+                        if ep_rew_mean.size > 100:
+                            ep_rew_mean = np.delete(ep_rew_mean, 0)
+                        if ep_len_mean.size > 100:
+                            ep_len_mean = np.delete(ep_len_mean, 0)
+
+                        wandb.log({"rollout/ep_rew_mean": ep_rew_mean.mean(),
+                                   "rollout/ep_len_mean": ep_len_mean.mean()})
+                        
+                        if args.adversarial:
+                            wandb.log({"rollout/num_crashes": num_crashes[-1]})
+                            wandb.log({"rollout/num_crashes_mean": np.mean(num_crashes)})
                     episode_rewards[worker] = 0
                     duration[worker] = 0
 

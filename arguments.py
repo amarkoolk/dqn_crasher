@@ -12,7 +12,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    cuda: bool = False
     """if toggled, cuda will be enabled by default"""
     metal: bool = False
     """if toggled, metal will be enabled by default"""
@@ -64,3 +64,8 @@ class Args:
     """the ending epsilon for exploration"""
     decay_e: int = 1000
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
+
+    # NN specific arguments
+    hidden_layer: int = 128
+    """the number of neurons in the hidden layer"""
+    
