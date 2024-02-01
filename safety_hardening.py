@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from arguments import Args
 from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 from create_env import make_env, make_vector_env
-from models import DQN, DQN_Agent
+from dqn_agent import DQN, DQN_Agent
 from config import load_config
 
 
@@ -75,10 +75,12 @@ if __name__ == "__main__":
         )
 
     # Load Environment Configurations
-    env_config = load_config("env_configs/single_agent.yaml")
+    
+    # Non-Adversarial Environment
+    na_env_cfg = load_config("env_configs/single_agent.yaml")
 
     # Create Vector Env with Adversarial Rewards
-    env = make_vector_env(env_config, num_envs = args.num_envs, adversarial = args.adversarial)
+    env = make_vector_env(na_env_cfg, num_envs = args.num_envs, adversarial = False)
 
     # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
     # 2. Teach Adversarial Vehicle to Drive Unsafely in Highway against Ego Vehicle

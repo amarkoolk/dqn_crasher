@@ -79,11 +79,12 @@ class DQN_Agent(object):
         eps_threshold = self.end_e + (self.start_e - self.end_e) * \
             math.exp(-1. * steps_done / self.decay_e)
         if sample > eps_threshold:
-            with torch.no_grad():
+            # with torch.no_grad():
                 # t.max(1) will return the largest column value of each row.
                 # second column on max result is index of where max element was
                 # found, so we pick action with the larger expected reward.
-                return self.policy_net(state).max(1)[1].view(self.num_envs, 1)
+                # return self.policy_net(state).max(1)[1].view(self.num_envs, 1)
+            return self.predict(state)
         else:
             # print('Action Space: {}'.format(torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long).shape))
             return torch.tensor(np.array([[env.action_space.sample()]]), device=self.device, dtype=torch.long)
@@ -91,7 +92,12 @@ class DQN_Agent(object):
     def optimize_model(self):
         if len(self.memory) < self.batch_size:
             return
-        transitions = self.memory.sample(self.batch_size)
+        
+        if isinstance(self.memory, PrioritizedExperienceReplay):
+            idxs, transitions, is_weights = self.memory.sample(self.batch_size)
+        else:
+            transitions = self.memory.sample(self.batch_size)
+        
         # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
         # detailed explanation). This converts batch-array of Transitions
         # to Transition of batch-arrays.
@@ -126,6 +132,14 @@ class DQN_Agent(object):
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
         loss = criterion(state_action_values, expected_state_action_values)
+        
+        # update priorities
+        if isinstance(self.memory, PrioritizedExperienceReplay):
+            errors = (state_action_values - expected_state_action_values).detach().cpu().squeeze().tolist()
+            self.memory.update(idxs, errors)
+        
+            loss = (torch.FloatTensor(is_weights).to(self.device) * loss).mean()
+
 
         # Optimize the model
         self.optimizer.zero_grad()
