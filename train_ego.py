@@ -16,7 +16,7 @@ from arguments import Args
 from crash_wrappers import CrashRewardWrapper, CrashResetWrapper
 from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 from create_env import make_vector_env
-from models import DQN
+from DQN_Agent import DQN
 
 
 

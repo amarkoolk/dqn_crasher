@@ -15,6 +15,7 @@ class CrashResetWrapper(Wrapper):
     def _reset(self) -> None:
 
         # Create Road Environment
+        print(f'Using Custom Reset Wrapper!')
         lane_count = self.unwrapped.config['lanes_count']
         show_traj  = self.unwrapped.config['show_trajectories']
 

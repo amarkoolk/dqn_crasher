@@ -24,14 +24,20 @@ class Args:
     """the entity (team) of wandb's project"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
+    learn: bool = True
+    """whether to learn the model"""
     save_model: bool = False
     """whether to save model into the `runs/{run_name}` folder"""
+    load_model: bool = False
+    """whether to load model from the `runs/{run_name}` folder"""
+    save_trajectories: bool = False
+    """whether to save trajectories"""
+    trajectories_folder: str = "trajectories"
+    """the folder to save trajectories"""
 
     # Environment specific arguments
     max_duration: int = 100
     """maximum duration of one episode"""
-    adversarial: bool = True
-    """if toggled, the environment will be adversarial"""
     crash_reward: float = 400
     """reward for collision"""
     ttc_x_reward: float = 4

@@ -2,6 +2,7 @@ import wandb
 import gymnasium as gym
 
 import tyro
+import os
 import math
 import random
 import numpy as np
@@ -15,6 +16,7 @@ import torch.nn.functional as F
 from arguments import Args
 from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 from create_env import make_env, make_vector_env
+from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
 from dqn_agent import DQN, DQN_Agent
 from config import load_config
 
@@ -29,7 +31,6 @@ from config import load_config
 if __name__ == "__main__":
     # Parse command line arguments
     args = tyro.cli(Args)
-    print(args)
     
     # Check Argument Inputs
     assert args.num_envs > 0
@@ -40,13 +41,10 @@ if __name__ == "__main__":
     assert args.tau > 0
     assert args.batch_size > 0
     assert args.start_e > 0
-    assert args.buffer_type in ["ER", "PER", "HER"]
+    assert args.buffer_type in ["ER", "PER"]
     assert args.model_type in ["DQN"]
 
     assert args.max_duration > 0
-
-    if args.buffer_type == "HER":
-        raise NotImplementedError("HER is not implemented yet")
 
     # Use wandb to log training runs
     if args.track:
@@ -74,19 +72,6 @@ if __name__ == "__main__":
             }
         )
 
-    # Load Environment Configurations
-    
-    # Non-Adversarial Environment
-    na_env_cfg = load_config("env_configs/single_agent.yaml")
-
-    # Create Vector Env with Adversarial Rewards
-    env = make_vector_env(na_env_cfg, num_envs = args.num_envs, adversarial = False)
-
-    # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
-    # 2. Teach Adversarial Vehicle to Drive Unsafely in Highway against Ego Vehicle
-
-
-
     if args.cuda:
         device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
     elif args.metal:
@@ -94,11 +79,110 @@ if __name__ == "__main__":
     else:
         device = torch.device("cpu")
 
-    # Initialize DQN Agent
-    agent = DQN_Agent(env, args, device)
-    agent.learn(env, args.total_timesteps)
-    env.close()
+    # Create Trajectories Folder
+    if args.save_trajectories:
+        os.makedirs(args.trajectories_folder, exist_ok=True)
 
-    # Save the model
-    if args.save_model:
-        agent.save_model()
+    # Load Environment Configurations
+    # Non-Adversarial Environment Config
+    # na_env_cfg = load_config("env_configs/single_agent.yaml")
+
+    # Adversarial Environment Config
+    # adv_env_cfg = load_config("env_configs/single_agent_crash.yaml")
+
+    # Multi-Agent Environment Config
+    ma_config = load_config("env_configs/multi_agent.yaml")
+
+    # Create Vector Env with Non-Adversarial Rewards
+    # na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, adversarial = False)
+
+    # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
+    # ego_agent = DQN_Agent(na_env, args, device, adversarial = False, save_trajectories=args.save_trajectories)
+
+    # # Load Ego Model
+    # if args.load_model:
+    #     ego_agent.load_model(path = 'ego_model.pth')
+
+    # # Learn Ego Model Initially
+    # if args.learn:
+    #     ego_agent.learn(na_env, args.total_timesteps)
+    # na_env.close()
+
+    # # Save Non-Adversarial Collision Trajectories
+    # if args.save_trajectories:
+    #     ego_agent.trajectory_store.write(args.trajectories_folder+'/na_collision_trajectories', 'json')
+
+    # # Save Ego Model
+    # if args.save_model:
+    #     ego_agent.save_model(path = 'ego_model.pth')
+
+    # 2. Test Ego Vehicle in Non-Adversarial Environment
+    
+    # na_env = gym.make('crash-v0', config=na_env_cfg, render_mode='rgb_array')
+    # na_env.configure({'adversarial' : False})
+    # args.num_envs = 1
+    # ego_agent = DQN_Agent(na_env, args, device, adversarial = False, save_trajectories=args.save_trajectories)
+    # ego_agent.load_model(path = 'ego_model.pth')
+    # while True:
+    #     done = truncated = False
+    #     obs, info = na_env.reset()
+    #     ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
+    #     while not (done or truncated):
+    #         with torch.no_grad():
+    #             ego_action = torch.argmax(ego_agent.policy_net(ego_state))
+    #         obs, reward, done, truncated, info = na_env.step(ego_action)
+    #         ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
+    #         na_env.render()
+
+    # na_env.close()
+
+    # 3. Test Ego Vehicle in Adversarial Environment/ Train Adversarial Agent
+    env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+    args.num_envs = 1
+    ego_agent = DQN_Agent(env, args, device, adversarial = False, save_trajectories=args.save_trajectories, multi_agent=True)
+    ego_agent.load_model(path = 'ego_model.pth')
+    npc_agent = DQN_Agent(env, args, device, adversarial = True, save_trajectories = args.save_trajectories, multi_agent=True)
+
+    step = 0
+    # Testing Loop
+    while True:
+        done = False
+        obs, info = env.reset()
+        ego_state = torch.tensor(obs[0].flatten(), dtype=torch.float32, device=device)
+        npc_state = torch.tensor(obs[1].flatten(), dtype=torch.float32, device=device)
+        while not done:
+            with torch.no_grad():
+                ego_action = torch.argmax(ego_agent.policy_net(ego_state))
+            npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, step))
+            obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
+            reward = torch.tensor(reward, dtype = torch.float32, device=device)
+            done = terminated | truncated
+
+            ego_state = torch.tensor(obs[0].flatten(), dtype=torch.float32, device=device)
+
+            npc_next_state = torch.tensor(obs[1].flatten(), dtype=torch.float32, device=device)
+            
+            if terminated:
+                npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), None, reward.view(1,1))
+            else:
+                npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), npc_next_state.view(1,npc_agent.n_observations), reward.view(1,1))
+            
+            npc_state = npc_next_state
+
+            # Perform one step of the optimization (on the policy network)
+            npc_agent.optimize_model()
+
+            # Soft update of the target network's weights
+            # θ′ ← τ θ + (1 −τ )θ′
+            target_net_state_dict = npc_agent.target_net.state_dict()
+            policy_net_state_dict = npc_agent.policy_net.state_dict()
+            for key in policy_net_state_dict:
+                target_net_state_dict[key] = policy_net_state_dict[key]*npc_agent.tau + target_net_state_dict[key]*(1-npc_agent.tau)
+            npc_agent.target_net.load_state_dict(target_net_state_dict)
+
+
+            step += 1
+            env.render()
+
+    env.close()
+    

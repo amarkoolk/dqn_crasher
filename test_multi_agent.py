@@ -1,4 +1,5 @@
 from create_env import make_env, make_vector_env
+from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
 import gymnasium as gym
 
 import wandb
@@ -20,7 +21,7 @@ def test_multi_agent():
             },
             "lanes_count" : 2,
             "vehicles_count" : 0,
-            "duration" : 40,
+            "duration" : 10,
             "initial_lane_id" : None,
             "policy_frequency": 1,
             # Reset Configs
@@ -48,17 +49,21 @@ def test_multi_agent():
     #     monitor_gym=False,  # auto-upload the videos of agents playing the game
     #     save_code=True,  # optional
     # )
-    env = gym.make(config["env_name"],render_mode='rgb_array')
-    env.configure(env_config)
+    env = gym.make('highway-v0', config=env_config, render_mode='rgb_array')
+    env = CrashResetWrapper(env)
     obs, info = env.reset()
     done = truncated = False
-    while not (done or truncated):
-        # Dispatch the observations to the model to get the tuple of actions
-        action = env.action_space.sample()
-        # Execute the actions
-        next_obs, reward, done, truncated, info = env.step(action)
-        obs = next_obs
-        env.render()
+    while True:
+        break
+        done = truncated = False
+        obs, info = env.reset()
+        while not (done or truncated):
+            # Dispatch the observations to the model to get the tuple of actions
+            action = env.action_space.sample()
+            # Execute the actions
+            next_obs, reward, done, truncated, info = env.step(action)
+            obs = next_obs
+            env.render()
 
 if __name__ == "__main__":
     test_multi_agent()

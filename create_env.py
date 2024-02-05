@@ -7,10 +7,12 @@ import multiprocessing
 
 def make_env(env_config, adversarial : bool = False):
     def _env_fn():
-        env = gym.make('highway-v0', config=env_config, render_mode='rgb_array')
+        env = gym.make('crash-v0', config=env_config, render_mode='rgb_array')
+
+        env = CrashResetWrapper(env)
         if adversarial:
-            env = CrashResetWrapper(env)
             env = CrashRewardWrapper(env)
+            env.configure({'adversarial' : True})
         return env
     return _env_fn
 
