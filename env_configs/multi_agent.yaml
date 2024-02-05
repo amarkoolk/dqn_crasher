@@ -1,0 +1,30 @@
+action:
+  action_config:
+    type: DiscreteMetaAction
+  type: MultiAgentAction
+controlled_vehicles: 2
+duration: 40
+initial_lane_id: null
+initial_speed: 20
+lanes_count: 2
+mean_delta_v: 0
+mean_distance: 20
+observation:
+  observation_config:
+    type: Kinematics
+  type: MultiAgentObservation
+policy_frequency: 1
+vehicles_count: 0
+spawn_configs:
+- behind_left
+- behind_right
+- behind_center
+- adjacent_left
+- adjacent_right
+- forward_left
+- forward_right
+- forward_center
+tolerance: 0.001
+crash_reward: 400
+ttc_x_reward: 4
+ttc_y_reward: 1
