@@ -50,11 +50,10 @@ def test_multi_agent():
     #     save_code=True,  # optional
     # )
     env = gym.make('highway-v0', config=env_config, render_mode='rgb_array')
-    env = CrashResetWrapper(env)
+    # env = CrashResetWrapper(env)
     obs, info = env.reset()
     done = truncated = False
     while True:
-        break
         done = truncated = False
         obs, info = env.reset()
         while not (done or truncated):

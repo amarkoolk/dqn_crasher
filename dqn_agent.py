@@ -93,7 +93,7 @@ class DQN(nn.Module):
     
 class DQN_Agent(object):
 
-    def __init__(self, env, args, device = 'cpu', adversarial = False, save_trajectories = False, multi_agent = False):
+    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False):
 
         # BATCH_SIZE is the number of transitions sampled from the replay buffer
         # GAMMA is the discount factor as mentioned in the previous section
@@ -114,13 +114,18 @@ class DQN_Agent(object):
         self.num_envs = args.num_envs
         self.device = device
         self.track = args.track
-        self.adversarial = adversarial
         self.multi_agent = multi_agent
         
         if self.num_envs > 1:
-            self.n_actions = env.single_action_space.n
-            state, _ = env.reset()
-            self.n_observations = len(state[0].flatten())
+            if self.multi_agent:
+                self.n_actions = env.single_action_space[0].n
+                state, _ = env.reset()
+                self.n_observations = len(state[0][0].flatten())
+            else:
+                self.n_actions = env.single_action_space.n
+                state, _ = env.reset()
+                print(state[0])
+                self.n_observations = len(state[0].flatten())
         elif self.num_envs == 1:
             if self.multi_agent:
                 self.n_actions = env.action_space[0].n
@@ -271,8 +276,10 @@ class DQN_Agent(object):
         num_crashes = []
         episode_rewards = np.zeros(self.num_envs)
         duration = np.zeros(self.num_envs)
-        ep_rew_mean = np.zeros(0)
-        ep_len_mean = np.zeros(0)
+        episode_speed = np.zeros(self.num_envs)
+        ep_rew_total = np.zeros(0)
+        ep_len_total = np.zeros(0)
+        ep_speed_total = np.zeros(0)
 
         t_step = 0
         ep_num = 0
@@ -293,6 +300,7 @@ class DQN_Agent(object):
             state = self.update(state, action, observation, reward, terminated)
             episode_rewards = episode_rewards + reward.cpu().numpy()
             duration = duration + np.ones(self.num_envs)
+            episode_speed = episode_speed + np.linalg.norm(state[:,3:5].cpu().numpy(), axis=1)
 
             for worker in range(self.num_envs):
                 if done[worker]:
@@ -305,20 +313,26 @@ class DQN_Agent(object):
 
                     num_crashes.append(float(info['final_info'][worker]['crashed']))
                     if self.track:
-                        ep_rew_mean = np.append(ep_rew_mean, episode_rewards[worker])
-                        ep_len_mean = np.append(ep_len_mean, duration[worker])
-                        if ep_rew_mean.size > 100:
-                            ep_rew_mean = np.delete(ep_rew_mean, 0)
-                        if ep_len_mean.size > 100:
-                            ep_len_mean = np.delete(ep_len_mean, 0)
+                        ep_rew_total = np.append(ep_rew_total, episode_rewards[worker])
+                        ep_len_total = np.append(ep_len_total, duration[worker])
+                        ep_speed_total = np.append(ep_speed_total, episode_speed[worker]/duration[worker])
+                        if ep_rew_total.size > 100:
+                            ep_rew_total = np.delete(ep_rew_total, 0)
+                        if ep_len_total.size > 100:
+                            ep_len_total = np.delete(ep_len_total, 0)
+                        if ep_speed_total.size > 100:
+                            ep_speed_total = np.delete(ep_speed_total, 0)
 
-                        wandb.log({"rollout/ep_rew_mean": ep_rew_mean.mean(),
-                                "rollout/ep_len_mean": ep_len_mean.mean(),
+                        wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
+                                "rollout/ep_len_mean": ep_len_total.mean(),
                                 "rollout/num_crashes": num_crashes[-1],
-                                "rollout/num_crashes_mean": np.mean(num_crashes)})
+                                "rollout/num_crashes_mean": np.mean(num_crashes),
+                                "rollout/ep_speed_mean": ep_speed_total.mean()},
+                                step = ep_num)
 
                     episode_rewards[worker] = 0
                     duration[worker] = 0
+                    episode_speed[worker] = 0
                     ep_num += 1
 
                 t_step += 1
@@ -341,8 +355,10 @@ class DQN_Agent(object):
         num_crashes = []
         episode_rewards = np.zeros(self.num_envs)
         duration = np.zeros(self.num_envs)
+        episode_speed = np.zeros(self.num_envs)
         ep_rew_mean = np.zeros(0)
         ep_len_mean = np.zeros(0)
+        ep_speed_mean = np.zeros(0)
 
         t_step = 0
         ep_num = 0
@@ -372,7 +388,8 @@ class DQN_Agent(object):
                         wandb.log({"rollout/ep_rew_mean": ep_rew_mean.mean(),
                                 "rollout/ep_len_mean": ep_len_mean.mean(),
                                 "rollout/num_crashes": num_crashes[-1],
-                                "rollout/num_crashes_mean": np.mean(num_crashes)})
+                                "rollout/num_crashes_mean": np.mean(num_crashes)},
+                                step = ep_num)
 
                     episode_rewards[worker] = 0
                     duration[worker] = 0
