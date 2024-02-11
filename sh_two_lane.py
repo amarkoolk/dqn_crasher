@@ -41,7 +41,7 @@ def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config
         env_config['normalize_reward'] = False
         env_config['collision_reward'] = 400
     
-    env = make_vector_env(env_config, args.num_envs, record_video=record_video, record_every=100)
+    env = make_vector_env(env_config, args.num_envs, record_video=record_video, record_dir=f'videos_{cycle}', record_every=100)
     ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True)
     ego_agent.load_model(path = ego_model)
     npc_agent = DQN_Agent(env, args, device, save_trajectories = args.save_trajectories, multi_agent=True)
@@ -150,14 +150,16 @@ if __name__ == "__main__":
         device = torch.device("mps" if torch.backends.mps.is_available()  else "cpu")
     else:
         device = torch.device("cpu")
+
+    args.num_envs = min(args.num_envs, os.cpu_count())
     
     ma_config = load_config("env_configs/multi_agent.yaml")
     ego_model = "ego_model.pth"
     npc_model = "npc_model.pth"
 
     cycles = 2
-    for cycle in cycles:
-        multi_agent_training_loop(cycle, ego_model, npc_model, False, ma_config, args, device, False)
+    for cycle in range(cycles):
+        multi_agent_training_loop(cycle, ego_model, npc_model, False, ma_config, args, device, True)
         npc_model = f"{cycle}_npc_model.pth"
-        multi_agent_training_loop(cycle, ego_model, npc_model, True, ma_config, args, device, False)
+        multi_agent_training_loop(cycle, ego_model, npc_model, True, ma_config, args, device, True)
         ego_model = f"{cycle}_ego_model.pth"
