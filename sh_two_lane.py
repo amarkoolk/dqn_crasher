@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+import os
 import random
 import json
 import math
@@ -20,20 +21,31 @@ from wandb_logging import initialize_logging
 from config import load_config
 from create_env import make_env, make_vector_env
 import tyro
+
 from arguments import Args
 
 
-def multi_agent_training_loop(env_config, args, device, use_pbar = True):
+def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config, args, device, record_video = False, use_pbar = True):
 
     if use_pbar:
         pbar = tqdm(total=args.total_timesteps)
     else:
         pbar = None
+
+    if train_ego:
+        env_config['adversarial'] = False
+        env_config['normalize_reward'] = True
+        env_config['collision_reward'] = -1
+    else:
+        env_config['adversarial'] = True
+        env_config['normalize_reward'] = False
+        env_config['collision_reward'] = 400
     
-    env = make_vector_env(env_config, args.num_envs)
+    env = make_vector_env(env_config, args.num_envs, record_video=record_video, record_every=100)
     ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True)
-    ego_agent.load_model(path = 'ego_model.pth')
+    ego_agent.load_model(path = ego_model)
     npc_agent = DQN_Agent(env, args, device, save_trajectories = args.save_trajectories, multi_agent=True)
+    npc_agent.load_model(path = npc_model)
 
     if args.track:
         if wandb.run is not None:
@@ -68,8 +80,12 @@ def multi_agent_training_loop(env_config, args, device, use_pbar = True):
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
 
-        ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_agent.n_observations), dtype=torch.float32, device=device)
-        npc_state = npc_agent.update(npc_state, npc_action, obs[1], reward, terminated)
+        if train_ego:
+            ego_state = ego_agent.update(ego_state, ego_action, obs[0], reward, terminated)
+            npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_agent.n_observations), dtype=torch.float32, device=device)
+        else:
+            ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_agent.n_observations), dtype=torch.float32, device=device)
+            npc_state = npc_agent.update(npc_state, npc_action, obs[1], reward, terminated)
 
         episode_rewards = episode_rewards + reward.cpu().numpy()
         duration = duration + np.ones(args.num_envs)
@@ -103,6 +119,7 @@ def multi_agent_training_loop(env_config, args, device, use_pbar = True):
                             "rollout/sr100": np.mean(num_crashes[-100:]),
                             "rollout/ego_speed_mean": ep_speed_total.mean()},
                             step = ep_num)
+                    
 
                 episode_rewards[worker] = 0
                 duration[worker] = 0
@@ -115,6 +132,13 @@ def multi_agent_training_loop(env_config, args, device, use_pbar = True):
 
     if use_pbar:
         pbar.close()
+
+    if train_ego:
+        ego_agent.save_model(path=f'{cycle}_ego_model.pth')
+    else:
+        npc_agent.save_model(path=f'{cycle}_npc_model.pth')
+
+    wandb.finish()
     env.close()
 
 if __name__ == "__main__":
@@ -128,4 +152,12 @@ if __name__ == "__main__":
         device = torch.device("cpu")
     
     ma_config = load_config("env_configs/multi_agent.yaml")
-    multi_agent_training_loop(ma_config, args, device)
+    ego_model = "ego_model.pth"
+    npc_model = "npc_model.pth"
+
+    cycles = 2
+    for cycle in cycles:
+        multi_agent_training_loop(cycle, ego_model, npc_model, False, ma_config, args, device, False)
+        npc_model = f"{cycle}_npc_model.pth"
+        multi_agent_training_loop(cycle, ego_model, npc_model, True, ma_config, args, device, False)
+        ego_model = f"{cycle}_ego_model.pth"

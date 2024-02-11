@@ -52,3 +52,8 @@ ttc_x_reward: 4
 ttc_y_reward: 1
 adversarial: True
 normalize_reward: False
+
+# For Ego Vehicle
+right_lane_reward: 0.1
+high_speed_reward: 0.4
+lane_change_reward: 0

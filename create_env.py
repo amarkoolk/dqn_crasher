@@ -1,16 +1,14 @@
 import gymnasium as gym
-from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
 from gymnasium.wrappers.record_video import RecordVideo
 from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 
 
-def make_env(env_config, record_video = False, record_dir = './', record_every = 1):
+def make_env(env_config, record_video = False, record_dir = '', record_every = 1):
     def _env_fn():
         env = gym.make('crash-v0', config=env_config, render_mode='rgb_array')
-
-        env = CrashResetWrapper(env)
         if record_video:
-            env = RecordVideo(env, video_folder = record_dir + 'videos', episode_trigger = record_every)
+            trigger = lambda t: t % record_every == 0
+            env = RecordVideo(env, video_folder = './videos', episode_trigger = trigger, disable_logger=True)
         return env
     return _env_fn
 
