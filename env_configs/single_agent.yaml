@@ -35,3 +35,4 @@ right_lane_reward: 0.1
 high_speed_reward: 0.4
 lane_change_reward: 0
 normalize_reward: True
+adversarial: False

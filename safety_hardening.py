@@ -73,10 +73,10 @@ if __name__ == "__main__":
     ma_config = load_config("env_configs/multi_agent.yaml")
 
     # Create Vector Env with Non-Adversarial Rewards
-    na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, adversarial = False)
+    na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=True, record_dir='na_videos', record_every=100)
 
     # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
-    ego_agent = DQN_Agent(na_env, args, device, adversarial = False, save_trajectories=args.save_trajectories)
+    ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories)
 
     # # Load Ego Model
     if args.load_model:
@@ -116,89 +116,89 @@ if __name__ == "__main__":
     # na_env.close()
 
     # 3. Test Ego Vehicle in Adversarial Environment/ Train Adversarial Agent
-    env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
-    args.num_envs = 1
-    args.track = False
-    ego_agent = DQN_Agent(env, args, device, adversarial = False, save_trajectories=args.save_trajectories, multi_agent=True)
-    ego_agent.load_model(path = 'ego_model.pth')
-    npc_agent = DQN_Agent(env, args, device, adversarial = True, save_trajectories = args.save_trajectories, multi_agent=True)
+    # env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+    # args.num_envs = 1
+    # args.track = False
+    # ego_agent = DQN_Agent(env, args, device, adversarial = False, save_trajectories=args.save_trajectories, multi_agent=True)
+    # ego_agent.load_model(path = 'ego_model.pth')
+    # npc_agent = DQN_Agent(env, args, device, adversarial = True, save_trajectories = args.save_trajectories, multi_agent=True)
 
-    if wandb.run is not None:
-        wandb.finish()
-        run = initialize_logging(args)
-    else:
-        run = initialize_logging(args)
+    # if wandb.run is not None:
+    #     wandb.finish()
+    #     run = initialize_logging(args)
+    # else:
+    #     run = initialize_logging(args)
 
-    num_crashes = []
-    episode_rewards = 0.0
-    duration = 0.0
-    ep_rew_mean = np.zeros(0)
-    ep_len_mean = np.zeros(0)
+    # num_crashes = []
+    # episode_rewards = 0.0
+    # duration = 0.0
+    # ep_rew_mean = np.zeros(0)
+    # ep_len_mean = np.zeros(0)
 
-    t_step = 0
-    ep_num = 0
+    # t_step = 0
+    # ep_num = 0
     
-    # Testing Loop
-    while True:
-        done = False
-        obs, info = env.reset()
-        ego_state = torch.tensor(obs[0].flatten(), dtype=torch.float32, device=device)
-        npc_state = torch.tensor(obs[1].flatten(), dtype=torch.float32, device=device)
-        while not done:
-            with torch.no_grad():
-                ego_action = torch.argmax(ego_agent.policy_net(ego_state))
-            npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, t_step))
-            obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
-            reward = torch.tensor(reward, dtype = torch.float32, device=device)
-            done = terminated | truncated
+    # # Testing Loop
+    # while True:
+    #     done = False
+    #     obs, info = env.reset()
+    #     ego_state = torch.tensor(obs[0].flatten(), dtype=torch.float32, device=device)
+    #     npc_state = torch.tensor(obs[1].flatten(), dtype=torch.float32, device=device)
+    #     while not done:
+    #         with torch.no_grad():
+    #             ego_action = torch.argmax(ego_agent.policy_net(ego_state))
+    #         npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, t_step))
+    #         obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
+    #         reward = torch.tensor(reward, dtype = torch.float32, device=device)
+    #         done = terminated | truncated
 
 
-            ego_state = torch.tensor(obs[0].flatten(), dtype=torch.float32, device=device)
+    #         ego_state = torch.tensor(obs[0].flatten(), dtype=torch.float32, device=device)
 
-            npc_next_state = torch.tensor(obs[1].flatten(), dtype=torch.float32, device=device)
+    #         npc_next_state = torch.tensor(obs[1].flatten(), dtype=torch.float32, device=device)
             
-            if terminated:
-                npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), None, reward.view(1,1))
-            else:
-                npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), npc_next_state.view(1,npc_agent.n_observations), reward.view(1,1))
+    #         if terminated:
+    #             npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), None, reward.view(1,1))
+    #         else:
+    #             npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), npc_next_state.view(1,npc_agent.n_observations), reward.view(1,1))
             
-            npc_state = npc_next_state
+    #         npc_state = npc_next_state
 
-            episode_rewards += reward.cpu().numpy()
-            duration += 1
+    #         episode_rewards += reward.cpu().numpy()
+    #         duration += 1
 
-            # Perform one step of the optimization (on the policy network)
-            npc_agent.optimize_model()
+    #         # Perform one step of the optimization (on the policy network)
+    #         npc_agent.optimize_model()
 
-            # Soft update of the target network's weights
-            # θ′ ← τ θ + (1 −τ )θ′
-            target_net_state_dict = npc_agent.target_net.state_dict()
-            policy_net_state_dict = npc_agent.policy_net.state_dict()
-            for key in policy_net_state_dict:
-                target_net_state_dict[key] = policy_net_state_dict[key]*npc_agent.tau + target_net_state_dict[key]*(1-npc_agent.tau)
-            npc_agent.target_net.load_state_dict(target_net_state_dict)
+    #         # Soft update of the target network's weights
+    #         # θ′ ← τ θ + (1 −τ )θ′
+    #         target_net_state_dict = npc_agent.target_net.state_dict()
+    #         policy_net_state_dict = npc_agent.policy_net.state_dict()
+    #         for key in policy_net_state_dict:
+    #             target_net_state_dict[key] = policy_net_state_dict[key]*npc_agent.tau + target_net_state_dict[key]*(1-npc_agent.tau)
+    #         npc_agent.target_net.load_state_dict(target_net_state_dict)
 
-            if done:
-                num_crashes.append(float(info['crashed']))
-                ep_rew_mean = np.append(ep_rew_mean, episode_rewards)
-                ep_len_mean = np.append(ep_len_mean, duration)
-                if ep_rew_mean.size > 100:
-                    ep_rew_mean = np.delete(ep_rew_mean, 0)
-                if ep_len_mean.size > 100:
-                    ep_len_mean = np.delete(ep_len_mean, 0)
+    #         if done:
+    #             num_crashes.append(float(info['crashed']))
+    #             ep_rew_mean = np.append(ep_rew_mean, episode_rewards)
+    #             ep_len_mean = np.append(ep_len_mean, duration)
+    #             if ep_rew_mean.size > 100:
+    #                 ep_rew_mean = np.delete(ep_rew_mean, 0)
+    #             if ep_len_mean.size > 100:
+    #                 ep_len_mean = np.delete(ep_len_mean, 0)
 
-                wandb.log({"rollout/ep_rew_mean": ep_rew_mean.mean(),
-                        "rollout/ep_len_mean": ep_len_mean.mean(),
-                        "rollout/num_crashes": num_crashes[-1],
-                        "rollout/num_crashes_mean": np.mean(num_crashes)},
-                        step = ep_num)
+    #             wandb.log({"rollout/ep_rew_mean": ep_rew_mean.mean(),
+    #                     "rollout/ep_len_mean": ep_len_mean.mean(),
+    #                     "rollout/num_crashes": num_crashes[-1],
+    #                     "rollout/num_crashes_mean": np.mean(num_crashes)},
+    #                     step = ep_num)
                 
-                episode_rewards = 0.0
-                duration = 0.0
-                ep_num += 1
+    #             episode_rewards = 0.0
+    #             duration = 0.0
+    #             ep_num += 1
 
-            t_step += 1
-            env.render()
+    #         t_step += 1
+    #         env.render()
 
-    env.close()
+    # env.close()
     

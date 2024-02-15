@@ -40,8 +40,10 @@ def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config
         env_config['adversarial'] = True
         env_config['normalize_reward'] = False
         env_config['collision_reward'] = 400
+
     
-    env = make_vector_env(env_config, args.num_envs, record_video=record_video, record_dir=f'videos_{cycle}', record_every=100)
+    video_dir = f'videos_{cycle}_{train_ego}'
+    env = make_vector_env(env_config, args.num_envs, record_video=record_video, record_dir=video_dir, record_every=100)
     ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True)
     ego_agent.load_model(path = ego_model)
     npc_agent = DQN_Agent(env, args, device, save_trajectories = args.save_trajectories, multi_agent=True)
@@ -73,8 +75,13 @@ def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config
     
     # Testing Loop
     while t_step < args.total_timesteps:
-        ego_action = torch.squeeze(ego_agent.predict(ego_state))
-        npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, t_step))
+        if train_ego:
+            ego_action = torch.squeeze(ego_agent.select_action(ego_state, env, t_step))
+            npc_action = torch.squeeze(npc_agent.predict(npc_state))
+        else:
+            ego_action = torch.squeeze(ego_agent.predict(ego_state))
+            npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, t_step))
+
         obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
@@ -137,6 +144,104 @@ def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config
         ego_agent.save_model(path=f'{cycle}_ego_model.pth')
     else:
         npc_agent.save_model(path=f'{cycle}_npc_model.pth')
+
+    wandb.finish()
+    env.close()
+
+def multi_agent_eval(ego_model, npc_model, env_config, args, device, record_video = False, use_pbar = True):
+
+    if use_pbar:
+        pbar = tqdm(total=args.total_timesteps)
+    else:
+        pbar = None
+    
+    env = make_env(env_config, record_video, record_dir=f'eval_videos', record_every=10)
+    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True)
+    ego_agent.load_model(path = ego_model)
+    npc_agent = DQN_Agent(env, args, device, save_trajectories = args.save_trajectories, multi_agent=True)
+    npc_agent.load_model(path = npc_model)
+
+    if args.track:
+        if wandb.run is not None:
+            wandb.finish()
+            run = initialize_logging(args)
+        else:
+            run = initialize_logging(args)
+
+    
+    num_crashes = []
+    episode_rewards = np.zeros(args.num_envs)
+    duration = np.zeros(args.num_envs)
+    episode_speed = np.zeros(args.num_envs)
+    ep_rew_total = np.zeros(0)
+    ep_len_total = np.zeros(0)
+    ep_speed_total = np.zeros(0)
+
+    t_step = 0
+    ep_num = 0
+
+
+    obs, info = env.reset()
+    ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_agent.n_observations), dtype=torch.float32, device=device)
+    npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_agent.n_observations), dtype=torch.float32, device=device)
+    
+    # Testing Loop
+    while t_step < args.total_timesteps:
+        ego_action = torch.squeeze(ego_agent.predict(ego_state))
+        npc_action = torch.squeeze(npc_agent.predict(npc_state))
+        obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
+
+        reward = torch.tensor(reward, dtype = torch.float32, device=device)
+        done = terminated | truncated
+
+        ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_agent.n_observations), dtype=torch.float32, device=device)
+        npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_agent.n_observations), dtype=torch.float32, device=device)
+
+        episode_rewards = episode_rewards + reward.cpu().numpy()
+        duration = duration + np.ones(args.num_envs)
+        episode_speed = episode_speed + np.linalg.norm(ego_state[:,3:5].cpu().numpy(), axis=1)
+
+
+        for worker in range(args.num_envs):
+            if done[worker]:
+                # Save Trajectories that end in a Crash
+                # if self.save_trajectories:
+                #     if info['final_info'][worker]['crashed']:
+                #         self.trajectory_store.save(worker, ep_num)
+                #     else:
+                #         self.trajectory_store.clear(worker)
+
+                num_crashes.append(float(info['final_info'][worker]['crashed']))
+                if args.track:
+                    ep_rew_total = np.append(ep_rew_total, episode_rewards[worker])
+                    ep_len_total = np.append(ep_len_total, duration[worker])
+                    ep_speed_total = np.append(ep_speed_total, episode_speed[worker]/duration[worker])
+                    if ep_rew_total.size > 100:
+                        ep_rew_total = np.delete(ep_rew_total, 0)
+                    if ep_len_total.size > 100:
+                        ep_len_total = np.delete(ep_len_total, 0)
+                    if ep_speed_total.size > 100:
+                        ep_speed_total = np.delete(ep_speed_total, 0)
+
+                    wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
+                            "rollout/ep_len_mean": ep_len_total.mean(),
+                            "rollout/num_crashes": num_crashes[-1],
+                            "rollout/sr100": np.mean(num_crashes[-100:]),
+                            "rollout/ego_speed_mean": ep_speed_total.mean()},
+                            step = ep_num)
+                    
+
+                episode_rewards[worker] = 0
+                duration[worker] = 0
+                episode_speed[worker] = 0
+                ep_num += 1
+
+            t_step += 1
+            pbar.update(1)
+
+
+    if use_pbar:
+        pbar.close()
 
     wandb.finish()
     env.close()
