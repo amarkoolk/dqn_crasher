@@ -16,7 +16,7 @@ from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 from tqdm import tqdm
 import wandb
 import gymnasium as gym
-from dqn_agent import DQN, DQN_Agent
+from dqn_agent import DQN, DQN_Agent, TrajectoryStore
 from wandb_logging import initialize_logging
 from config import load_config
 from create_env import make_env, make_vector_env
@@ -25,7 +25,7 @@ import tyro
 from arguments import Args
 
 
-def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config, args, device, record_video = False, use_pbar = True):
+def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config, args, device, trajectory_path, record_video = False, use_pbar = True):
 
     if use_pbar:
         pbar = tqdm(total=args.total_timesteps)
@@ -82,10 +82,27 @@ def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config
             ego_action = torch.squeeze(ego_agent.predict(ego_state))
             npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, t_step))
 
+        if args.num_envs == 1:
+            ego_action = ego_action.view(1,1)
+            npc_action = npc_action.view(1,1)
+
         obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
+
+        if done:
+            int_frames = info['final_info'][0]['int_frames']
+        else:
+            int_frames = info['int_frames'][0]
+
+        if args.save_trajectories:
+            for worker in range(args.num_envs):
+                if terminated[worker]:
+                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()), int_frames)
+                else:
+                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), obs[0][worker].flatten(), reward[worker].cpu().numpy()), int_frames)
+
 
         if train_ego:
             ego_state = ego_agent.update(ego_state, ego_action, obs[0], reward, terminated)
@@ -102,11 +119,11 @@ def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config
         for worker in range(args.num_envs):
             if done[worker]:
                 # Save Trajectories that end in a Crash
-                # if self.save_trajectories:
-                #     if info['final_info'][worker]['crashed']:
-                #         self.trajectory_store.save(worker, ep_num)
-                #     else:
-                #         self.trajectory_store.clear(worker)
+                if args.save_trajectories:
+                    if info['final_info'][worker]['crashed']:
+                        ego_agent.trajectory_store.save(worker, ep_num)
+                    else:
+                        ego_agent.trajectory_store.clear(worker)
 
                 num_crashes.append(float(info['final_info'][worker]['crashed']))
                 if args.track:
@@ -144,6 +161,9 @@ def multi_agent_training_loop(cycle, ego_model, npc_model, train_ego, env_config
         ego_agent.save_model(path=f'{cycle}_ego_model.pth')
     else:
         npc_agent.save_model(path=f'{cycle}_npc_model.pth')
+
+    if args.save_trajectories:
+        ego_agent.trajectory_store.write(trajectory_path, 'json')
 
     wandb.finish()
     env.close()
@@ -189,10 +209,23 @@ def multi_agent_eval(ego_model, npc_model, env_config, args, device, record_vide
     while t_step < args.total_timesteps:
         ego_action = torch.squeeze(ego_agent.predict(ego_state))
         npc_action = torch.squeeze(npc_agent.predict(npc_state))
+
+        if args.num_envs == 1:
+            ego_action = ego_action.view(1,1)
+            npc_action = npc_action.view(1,1)
+            
         obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
+
+        if args.save_trajectories:
+            for worker in range(args.num_envs):
+                if terminated[worker]:
+                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()))
+                else:
+                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), obs[0][worker].flatten(), reward[worker].cpu().numpy()))
+
 
         ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_agent.n_observations), dtype=torch.float32, device=device)
         npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_agent.n_observations), dtype=torch.float32, device=device)
@@ -264,7 +297,10 @@ if __name__ == "__main__":
 
     cycles = 2
     for cycle in range(cycles):
-        multi_agent_training_loop(cycle, ego_model, npc_model, False, ma_config, args, device, True)
+        trajectory_path = args.trajectories_folder+'/trajectories_ego_' + str(cycle)
+        multi_agent_training_loop(cycle, ego_model, npc_model, False, ma_config, args, device, trajectory_path)
         npc_model = f"{cycle}_npc_model.pth"
-        multi_agent_training_loop(cycle, ego_model, npc_model, True, ma_config, args, device, True)
+
+        trajectory_path = args.trajectories_folder+'/trajectories_npc_' + str(cycle)
+        multi_agent_training_loop(cycle, ego_model, npc_model, True, ma_config, args, device, trajectory_path)
         ego_model = f"{cycle}_ego_model.pth"

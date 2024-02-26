@@ -88,8 +88,8 @@ if __name__ == "__main__":
     na_env.close()
 
     # # Save Non-Adversarial Collision Trajectories
-    # if args.save_trajectories:
-    #     ego_agent.trajectory_store.write(args.trajectories_folder+'/na_collision_trajectories', 'json')
+    if args.save_trajectories:
+        ego_agent.trajectory_store.write(args.trajectories_folder+'/na_collision_trajectories', 'json')
 
     # # Save Ego Model
     if args.save_model:

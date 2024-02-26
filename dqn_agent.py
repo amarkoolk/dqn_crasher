@@ -15,28 +15,44 @@ from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 from tqdm import tqdm
 import wandb
 
-CrashTrajectory : TypeAlias = list[Transition]
+import matplotlib.pyplot as plt
+
 
 class TrajectoryStore(object):
     def __init__(self, num_envs: int):
         self.num_envs = num_envs
         self.trajectories = {}
         for i in range(num_envs):
-            self.trajectories[i] : CrashTrajectory = []
+            self.trajectories[i] = None
 
         self.crash_trajectories = {}
 
-    def add(self, worker_id: int, transition: Transition):
-        self.trajectories[worker_id].append(transition)
+    def add(self, worker_id: int, transition: Transition, int_frames: np.ndarray):
+
+        state_history = np.vstack((transition.state, int_frames[:-1,:]))
+
+        dx = state_history[:,6]
+        dy = state_history[:,7]
+        dvx = state_history[:,8]
+        dvy = state_history[:,9]
+        ttc_x = np.where(np.abs(dvx) > 1e-6, dx/dvx, dx/1e-6)
+        ttc_y = np.where(np.abs(dvy) > 1e-6, dy/dvy, dy/1e-6)
+
+        save_data = np.column_stack((state_history, ttc_x, ttc_y))
+        
+        if self.trajectories[worker_id] is None:
+            self.trajectories[worker_id] = save_data
+        else:
+            self.trajectories[worker_id] = np.vstack((self.trajectories[worker_id], save_data))
 
     def clear(self, worker_id: int):
-        self.trajectories[worker_id] = []
+        self.trajectories[worker_id] = None
 
     def save(self, worker_id: int, episode_num: int):
-        self.crash_trajectories[episode_num] = self.trajectory_to_dict(self.trajectories[worker_id])
-        self.trajectories[worker_id] = []
+        self.crash_trajectories[episode_num] = self.trajectories[worker_id].tolist()
+        self.trajectories[worker_id] = None
 
-    def trajectory_to_dict(self, trajectory: CrashTrajectory) -> dict:
+    def trajectory_to_dict(self, trajectory) -> dict:
         trajectory_dict = {}
         for episode, transition in enumerate(trajectory):
             trajectory_dict[episode] = self.transition_to_dict(transition)
@@ -128,13 +144,13 @@ class DQN_Agent(object):
                 self.n_observations = len(state[0].flatten())
         elif self.num_envs == 1:
             if self.multi_agent:
-                self.n_actions = env.action_space[0].n
+                self.n_actions = env.single_action_space[0].n
                 state, _ = env.reset()
                 self.n_observations = len(state[0].flatten())
             else:
-                self.n_actions = env.action_space.n
+                self.n_actions = env.single_action_space.n
                 state, _ = env.reset()
-                self.n_observations = len(state.flatten())
+                self.n_observations = len(state[0].flatten())
 
         self.policy_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
         self.target_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
@@ -286,16 +302,23 @@ class DQN_Agent(object):
 
         while(True):
             action = torch.squeeze(self.select_action(state, env, t_step))
+            if self.num_envs == 1:
+                action = action.view(1,1)
             observation, reward, terminated, truncated, info = env.step(action.cpu().numpy())
             reward = torch.tensor(reward, dtype = torch.float32, device=self.device)
             done = terminated | truncated
 
+            if done:
+                int_frames = info['final_info'][0]['int_frames']
+            else:
+                int_frames = info['int_frames'][0]
+
             if self.save_trajectories:
                 for worker in range(self.num_envs):
                     if terminated[worker]:
-                        self.trajectory_store.add(worker, Transition(state[worker].cpu().numpy(), action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()))
+                        self.trajectory_store.add(worker, Transition(state[worker].cpu().numpy(), action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()), int_frames)
                     else:
-                        self.trajectory_store.add(worker, Transition(state[worker].cpu().numpy(), action[worker].cpu().numpy(), observation[worker].flatten(), reward[worker].cpu().numpy()))
+                        self.trajectory_store.add(worker, Transition(state[worker].cpu().numpy(), action[worker].cpu().numpy(), observation[worker].flatten(), reward[worker].cpu().numpy()), int_frames)
 
             state = self.update(state, action, observation, reward, terminated)
             episode_rewards = episode_rewards + reward.cpu().numpy()
@@ -408,6 +431,9 @@ class DQN_Agent(object):
         print(f'Model Saved to {path}')
 
     def load_model(self, path):
-        self.policy_net.load_state_dict(torch.load(path))
-        self.target_net.load_state_dict(self.policy_net.state_dict())
-        print(f'Model Loaded from {path}')
+        try:
+            self.policy_net.load_state_dict(torch.load(path))
+            self.target_net.load_state_dict(self.policy_net.state_dict())
+            print(f'Model Loaded from {path}')
+        except:
+            print(f'Failed to Load Model from {path}')

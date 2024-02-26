@@ -50,28 +50,28 @@ class Args:
     """the type of the model"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
-    learning_rate: float = 1e-4
+    learning_rate: float = 5e-4
     """the learning rate of the optimizer"""
     num_envs: int = 1
     """the number of parallel game environments"""
-    buffer_size: int = 10000
+    buffer_size: int = 15000
     """the replay memory buffer size"""
     buffer_type: str = "ER"
     """the type of replay memory buffer"""
-    gamma: float = 0.99
+    gamma: float = 0.8
     """the discount factor gamma"""
     tau: float = 0.005
     """the target network update rate"""
-    batch_size: int = 128
+    batch_size: int = 32
     """the batch size of sample from the reply memory"""
     start_e: float = 1
     """the starting epsilon for exploration"""
     end_e: float = 0.05
     """the ending epsilon for exploration"""
-    decay_e: int = 1000
+    decay_e: int = 6000
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
 
     # NN specific arguments
-    hidden_layer: int = 128
+    hidden_layer: int = 256
     """the number of neurons in the hidden layer"""
     
