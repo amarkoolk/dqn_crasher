@@ -29,8 +29,11 @@ class TrajectoryStore(object):
 
     def add(self, worker_id: int, transition: Transition, int_frames: np.ndarray):
 
+
+
         state_history = np.vstack((transition.state, int_frames[:-1,:]))
 
+        # TTC Calculation
         dx = state_history[:,6]
         dy = state_history[:,7]
         dvx = state_history[:,8]
@@ -38,8 +41,18 @@ class TrajectoryStore(object):
         ttc_x = np.where(np.abs(dvx) > 1e-6, dx/dvx, dx/1e-6)
         ttc_y = np.where(np.abs(dvy) > 1e-6, dy/dvy, dy/1e-6)
 
-        save_data = np.column_stack((state_history, ttc_x, ttc_y))
-        
+        # Populate Actions
+        action_array = np.zeros(state_history.shape[0], dtype=int)
+        action_array[0] = transition.action
+        action_array[1:] = np.nan
+
+        # Populate Rewards
+        reward_array = np.zeros(state_history.shape[0], dtype=float)
+        reward_array[0] = transition.reward
+        reward_array[1:] = np.nan
+
+        save_data = np.column_stack((state_history, action_array, reward_array, ttc_x, ttc_y))
+
         if self.trajectories[worker_id] is None:
             self.trajectories[worker_id] = save_data
         else:
@@ -50,7 +63,7 @@ class TrajectoryStore(object):
 
     def save(self, worker_id: int, episode_num: int):
         self.crash_trajectories[episode_num] = self.trajectories[worker_id].tolist()
-        self.trajectories[worker_id] = None
+        self.clear(worker_id)
 
     def trajectory_to_dict(self, trajectory) -> dict:
         trajectory_dict = {}
@@ -329,10 +342,12 @@ class DQN_Agent(object):
                 if done[worker]:
                     # Save Trajectories that end in a Crash
                     if self.save_trajectories:
-                        if info['final_info'][worker]['crashed']:
-                            self.trajectory_store.save(worker, ep_num)
-                        else:
-                            self.trajectory_store.clear(worker)
+                        # if info['final_info'][worker]['crashed']:
+                        #     self.trajectory_store.save(worker, ep_num)
+                        # else:
+                        #     self.trajectory_store.clear(worker)
+                        self.trajectory_store.save(worker, ep_num)
+
 
                     num_crashes.append(float(info['final_info'][worker]['crashed']))
                     if self.track:
