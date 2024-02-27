@@ -25,6 +25,9 @@ def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
         npc_vx = episode_array[i,8] + episode_array[i,3]
         npc_vy = episode_array[i,9] + episode_array[i,4]
 
+        ttcx = episode_array[i,-2]
+        ttcy = episode_array[i,-1]
+
         # Rectangles
         ego_centroid = (ego_x, ego_y)
         ego_heading = np.arctan2(ego_vy, ego_vx)
@@ -40,7 +43,13 @@ def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
         axes.add_patch(npc_bbox)
         axes.annotate(f'Ego: {ego_vx:.2f}', xy=ego_anchor, xytext=(ego_anchor[0]+1, ego_anchor[1]+1))
         axes.annotate(f'NPC: {npc_vx:.2f}', xy=npc_anchor, xytext=(npc_anchor[0]+1, npc_anchor[1]+1))
-        axes.text(0.1, 0.99, f'Episode: {episode_num}', fontsize=12, ha='left', va='top', transform=axes.transAxes)
+        # axes.text(0.1, 0.99, f'Episode: {episode_num}, TTCX: {ttcx:.2f}, TTCY: {ttcy:.2f}', fontsize=12, ha='left', va='top', transform=axes.transAxes)
+
+        # Modified lines with individual colors for TTCX and TTCY
+        axes.text(0.1, 0.99, f'Episode: {episode_num}, ', fontsize=12, ha='left', va='top', transform=axes.transAxes)
+        axes.text(0.3, 0.99, f'TTCX: {ttcx:.2f}', fontsize=12, ha='left', va='top', color='green', transform=axes.transAxes)
+        axes.text(0.5, 0.99, f'TTCY: {ttcy:.2f}', fontsize=12, ha='left', va='top', color='purple', transform=axes.transAxes)
+
         min_y = -10
         max_y = 14
         xy_scalar = (max_y-min_y)/0.6
@@ -64,7 +73,7 @@ def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
 
 
 trajectory_path = 'trajectories'
-file_name = 'trajectories_ego_0.json'
+file_name = 'trajectories_ego_1.json'
 
 with open(os.path.join(trajectory_path, file_name), 'r') as f:
     data = json.load(f)
