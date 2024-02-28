@@ -39,19 +39,21 @@ if __name__ == "__main__":
     args.num_envs = min(args.num_envs, os.cpu_count())
     
     ma_config = load_config("env_configs/multi_agent.yaml")
-    ego_model = "ego_model.pth"
+    ego_model = "E0_MOBIL.pth"
     npc_model = "npc_model.pth"
 
     cycles = 2
     ego_version = 0
     npc_version = 0
     for cycle in range(cycles):
-        trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}'
-        multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_model, False, ma_config, args, device, trajectory_path)
-        npc_model = f"{cycle}_npc_model.pth"
+        train_ego = False
+        trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_{train_ego}'
+        multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_model, train_ego, ma_config, args, device, trajectory_path)
+        npc_model = f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth"
         npc_version += 1
 
-        trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}'
-        multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_model, True, ma_config, args, device, trajectory_path)
-        ego_model = f"{cycle}_ego_model.pth"
+        train_ego = True
+        trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_{train_ego}'
+        multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_model, train_ego, ma_config, args, device, trajectory_path)
+        ego_model = f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth"
         ego_version += 1
