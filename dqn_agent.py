@@ -193,7 +193,7 @@ class DQN_Agent(object):
 
         self.save_trajectories = save_trajectories
         if save_trajectories:
-            self.trajectory_store = TrajectoryStore(self.num_envs, episode_interval = 5000, file_dir = trajectory_path)
+            self.trajectory_store = TrajectoryStore(self.num_envs, episode_interval = 1000, file_dir = trajectory_path)
 
 
     def select_action(self, state, env, steps_done):
