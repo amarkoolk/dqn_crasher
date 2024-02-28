@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
+import os
 import random
 import json
 import math
@@ -19,12 +20,19 @@ import matplotlib.pyplot as plt
 
 
 class TrajectoryStore(object):
-    def __init__(self, num_envs: int):
+    def __init__(self, num_envs: int, episode_interval : int = 5000, file_dir : str = 'trajectories'):
         self.num_envs = num_envs
         self.trajectories = {}
         for i in range(num_envs):
             self.trajectories[i] = None
 
+        self.episode_interval = episode_interval
+        self.file_interval = 0
+        
+        if not os.path.exists(file_dir):
+            os.makedirs(file_dir)
+
+        self.file_dir = file_dir
         self.crash_trajectories = {}
 
     def add(self, worker_id: int, transition: Transition, int_frames: np.ndarray):
@@ -64,6 +72,12 @@ class TrajectoryStore(object):
     def save(self, worker_id: int, episode_num: int):
         self.crash_trajectories[episode_num] = self.trajectories[worker_id].tolist()
         self.clear(worker_id)
+
+        if len(self.crash_trajectories.keys()) % self.episode_interval == 0:
+            file_path = os.path.join(self.file_dir, f'{self.file_interval}')
+            self.write(file_path, 'json')
+            self.file_interval += 1
+            self.crash_trajectories = {}
 
     def trajectory_to_dict(self, trajectory) -> dict:
         trajectory_dict = {}
@@ -122,7 +136,7 @@ class DQN(nn.Module):
     
 class DQN_Agent(object):
 
-    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False):
+    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False, trajectory_path = 'trajectories'):
 
         # BATCH_SIZE is the number of transitions sampled from the replay buffer
         # GAMMA is the discount factor as mentioned in the previous section
@@ -179,7 +193,7 @@ class DQN_Agent(object):
 
         self.save_trajectories = save_trajectories
         if save_trajectories:
-            self.trajectory_store = TrajectoryStore(self.num_envs)
+            self.trajectory_store = TrajectoryStore(self.num_envs, episode_interval = 5000, file_dir = trajectory_path)
 
 
     def select_action(self, state, env, steps_done):

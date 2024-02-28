@@ -46,12 +46,12 @@ if __name__ == "__main__":
     ego_version = 0
     npc_version = 0
     for cycle in range(cycles):
-        trajectory_path = args.trajectories_folder+ f'/trajectories_E{ego_version}_V{npc_version}'
+        trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}'
         multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_model, False, ma_config, args, device, trajectory_path)
         npc_model = f"{cycle}_npc_model.pth"
         npc_version += 1
 
-        trajectory_path = args.trajectories_folder+ f'/trajectories_E{ego_version}_V{npc_version}'
+        trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}'
         multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_model, True, ma_config, args, device, trajectory_path)
         ego_model = f"{cycle}_ego_model.pth"
         ego_version += 1
