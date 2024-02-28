@@ -157,9 +157,13 @@ def multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_mo
         pbar.close()
 
     if train_ego:
-        ego_agent.save_model(path=f'{cycle}_ego_model.pth')
+        ego_agent.save_model(path=f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth")
     else:
-        npc_agent.save_model(path=f'{cycle}_npc_model.pth')
+        npc_agent.save_model(path=f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth")
+
+    if args.save_trajectories:
+        file_path = os.path.join(ego_agent.trajectory_store.file_dir, f'{ego_agent.trajectory_store.file_interval}')
+        ego_agent.trajectory_store.write(file_path, 'json')
 
     wandb.finish()
     env.close()
