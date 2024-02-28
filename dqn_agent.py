@@ -44,12 +44,12 @@ class TrajectoryStore(object):
         # Populate Actions
         action_array = np.zeros(state_history.shape[0], dtype=int)
         action_array[0] = transition.action
-        action_array[1:] = np.nan
+        action_array[1:] = -1
 
         # Populate Rewards
         reward_array = np.zeros(state_history.shape[0], dtype=float)
         reward_array[0] = transition.reward
-        reward_array[1:] = np.nan
+        reward_array[1:] = 0.0
 
         save_data = np.column_stack((state_history, action_array, reward_array, ttc_x, ttc_y))
 

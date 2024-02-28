@@ -73,7 +73,7 @@ if __name__ == "__main__":
     ma_config = load_config("env_configs/multi_agent.yaml")
 
     # Create Vector Env with Non-Adversarial Rewards
-    na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=True, record_dir='na_videos', record_every=100)
+    na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=False, record_dir='na_videos', record_every=100)
 
     # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
     ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories)
@@ -89,7 +89,7 @@ if __name__ == "__main__":
 
     # # Save Non-Adversarial Collision Trajectories
     if args.save_trajectories:
-        ego_agent.trajectory_store.write(args.trajectories_folder+'/na_collision_trajectories', 'json')
+        ego_agent.trajectory_store.write(args.trajectories_folder+'/trajectories_E0_MOBIL', 'json')
 
     # # Save Ego Model
     if args.save_model:
