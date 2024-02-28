@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
     # Use wandb to log training runs
     if args.track:
-        wandb_run = initialize_logging(args)
+        wandb_run = initialize_logging(args, ego_version=0)
 
     if args.cuda:
         device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
@@ -76,7 +76,7 @@ if __name__ == "__main__":
     na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=False, record_dir='na_videos', record_every=100)
 
     # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
-    ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories)
+    ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories, multi_agent=False, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
 
     # # Load Ego Model
     if args.load_model:

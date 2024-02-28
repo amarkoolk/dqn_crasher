@@ -41,9 +41,9 @@ def multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_mo
     
     video_dir = f'videos_{cycle}_{train_ego}'
     env = make_vector_env(env_config, args.num_envs, record_video=record_video, record_dir=video_dir, record_every=100)
-    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True)
+    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path)
     ego_agent.load_model(path = ego_model)
-    npc_agent = DQN_Agent(env, args, device, save_trajectories = args.save_trajectories, multi_agent=True)
+    npc_agent = DQN_Agent(env, args, device, save_trajectories = False, multi_agent=True)
     npc_agent.load_model(path = npc_model)
 
     print(f"Training Ego: {train_ego}, Ego Version: {ego_version}, NPC Version: {npc_version}")
@@ -160,9 +160,6 @@ def multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_mo
         ego_agent.save_model(path=f'{cycle}_ego_model.pth')
     else:
         npc_agent.save_model(path=f'{cycle}_npc_model.pth')
-
-    if args.save_trajectories:
-        ego_agent.trajectory_store.write(trajectory_path, 'json')
 
     wandb.finish()
     env.close()
