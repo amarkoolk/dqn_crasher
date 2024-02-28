@@ -2,6 +2,6 @@ __pycache__
 wandb
 videos*
 *_videos*
-*.pth
 .DS_Store
 trajectories*
+*.pth
