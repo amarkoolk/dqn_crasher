@@ -72,8 +72,8 @@ def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
         time_buffer.append((end_time - start_time)/1e9)
 
 
-trajectory_path = 'trajectories'
-file_name = 'trajectories_ego_1.json'
+trajectory_path = 'trajectories/E0_V0_TrainEgo_False'
+file_name = '0.json'
 
 with open(os.path.join(trajectory_path, file_name), 'r') as f:
     data = json.load(f)

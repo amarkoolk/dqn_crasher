@@ -85,7 +85,7 @@ def multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_mo
             ego_action = ego_action.view(1,1)
             npc_action = npc_action.view(1,1)
 
-        obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
+        obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
@@ -168,25 +168,28 @@ def multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_mo
     wandb.finish()
     env.close()
 
-def multi_agent_eval(ego_model, npc_model, env_config, args, device, record_video = False, use_pbar = True):
+def multi_agent_eval(ego_version, npc_version, ego_model, npc_model, env_config, args, device, trajectory_path, record_video = False, use_pbar = True):
 
     if use_pbar:
         pbar = tqdm(total=args.total_timesteps)
     else:
         pbar = None
     
-    env = make_env(env_config, record_video, record_dir=f'eval_videos', record_every=10)
-    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True)
+    video_dir = f'videos_eval_{ego_version}_{npc_version}'
+    env = make_vector_env(env_config, args.num_envs, record_video=record_video, record_dir=video_dir, record_every=100)
+    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path)
     ego_agent.load_model(path = ego_model)
-    npc_agent = DQN_Agent(env, args, device, save_trajectories = args.save_trajectories, multi_agent=True)
+    npc_agent = DQN_Agent(env, args, device, save_trajectories = False, multi_agent=True)
     npc_agent.load_model(path = npc_model)
+
+    print(f"Evaluating, Ego Version: {ego_version}, NPC Version: {npc_version}")
 
     if args.track:
         if wandb.run is not None:
             wandb.finish()
-            run = initialize_logging(args)
+            run = initialize_logging(args, ego_version, npc_version, False)
         else:
-            run = initialize_logging(args)
+            run = initialize_logging(args, ego_version, npc_version, False)
 
     
     num_crashes = []
@@ -207,25 +210,30 @@ def multi_agent_eval(ego_model, npc_model, env_config, args, device, record_vide
     
     # Testing Loop
     while t_step < args.total_timesteps:
+        
         ego_action = torch.squeeze(ego_agent.predict(ego_state))
         npc_action = torch.squeeze(npc_agent.predict(npc_state))
 
         if args.num_envs == 1:
             ego_action = ego_action.view(1,1)
             npc_action = npc_action.view(1,1)
-            
-        obs, reward, terminated, truncated, info = env.step((ego_action, npc_action))
+
+        obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
 
+        if done:
+            int_frames = info['final_info'][0]['int_frames']
+        else:
+            int_frames = info['int_frames'][0]
+
         if args.save_trajectories:
             for worker in range(args.num_envs):
                 if terminated[worker]:
-                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()))
+                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()), int_frames)
                 else:
-                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), obs[0][worker].flatten(), reward[worker].cpu().numpy()))
-
+                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), obs[0][worker].flatten(), reward[worker].cpu().numpy()), int_frames)
 
         ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_agent.n_observations), dtype=torch.float32, device=device)
         npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_agent.n_observations), dtype=torch.float32, device=device)
@@ -238,11 +246,11 @@ def multi_agent_eval(ego_model, npc_model, env_config, args, device, record_vide
         for worker in range(args.num_envs):
             if done[worker]:
                 # Save Trajectories that end in a Crash
-                # if self.save_trajectories:
-                #     if info['final_info'][worker]['crashed']:
-                #         self.trajectory_store.save(worker, ep_num)
-                #     else:
-                #         self.trajectory_store.clear(worker)
+                if args.save_trajectories:
+                    if info['final_info'][worker]['crashed']:
+                        ego_agent.trajectory_store.save(worker, ep_num)
+                    else:
+                        ego_agent.trajectory_store.clear(worker)
 
                 num_crashes.append(float(info['final_info'][worker]['crashed']))
                 if args.track:
@@ -275,6 +283,10 @@ def multi_agent_eval(ego_model, npc_model, env_config, args, device, record_vide
 
     if use_pbar:
         pbar.close()
+
+    if args.save_trajectories:
+        file_path = os.path.join(ego_agent.trajectory_store.file_dir, f'{ego_agent.trajectory_store.file_interval}')
+        ego_agent.trajectory_store.write(file_path, 'json')
 
     wandb.finish()
     env.close()

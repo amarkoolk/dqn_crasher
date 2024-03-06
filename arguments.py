@@ -34,6 +34,10 @@ class Args:
     """whether to save trajectories"""
     trajectories_folder: str = "trajectories"
     """the folder to save trajectories"""
+    eval: bool = False
+    """whether to evaluate the model"""
+    cycles: int = 2
+    """the number of cycles for training"""
 
     # Environment specific arguments
     max_duration: int = 100

@@ -1,6 +1,6 @@
 import wandb
 
-def initialize_logging(args, ego_version = None, npc_version = None, train_ego = None):
+def initialize_logging(args, ego_version = None, npc_version = None, train_ego = None, eval = False):
     if wandb.run is not None:
         wandb.finish()
 
@@ -19,7 +19,8 @@ def initialize_logging(args, ego_version = None, npc_version = None, train_ego =
                 "eps_end": args.end_e,
                 "eps_decay": args.decay_e,
                 "tau": args.tau,
-                "ReplayBuffer": args.buffer_type
+                "ReplayBuffer": args.buffer_type,
+                "eval": eval
     }
 
     if ego_version is not None:
@@ -28,6 +29,7 @@ def initialize_logging(args, ego_version = None, npc_version = None, train_ego =
         run_config['npc_version'] = npc_version
     if train_ego is not None:
         run_config['train_ego'] = train_ego
+    
         
     run = wandb.init(
             # set the wandb project where this run will be logged
