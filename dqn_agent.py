@@ -136,7 +136,7 @@ class DQN(nn.Module):
     
 class DQN_Agent(object):
 
-    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False, trajectory_path = 'trajectories'):
+    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False, trajectory_path = 'trajectories', cycle = 0):
 
         # BATCH_SIZE is the number of transitions sampled from the replay buffer
         # GAMMA is the discount factor as mentioned in the previous section
@@ -158,6 +158,8 @@ class DQN_Agent(object):
         self.device = device
         self.track = args.track
         self.multi_agent = multi_agent
+
+        self.cycle = cycle
         
         if self.num_envs > 1:
             if self.multi_agent:

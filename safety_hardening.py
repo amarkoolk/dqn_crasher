@@ -73,47 +73,50 @@ if __name__ == "__main__":
     ma_config = load_config("env_configs/multi_agent.yaml")
 
     # Create Vector Env with Non-Adversarial Rewards
-    na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=False, record_dir='na_videos', record_every=100)
+    # na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=False, record_dir='na_videos', record_every=100)
 
-    # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
-    ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories, multi_agent=False, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
+    # # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
+    # ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories, multi_agent=False, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
 
-    # # Load Ego Model
-    if args.load_model:
-        ego_agent.load_model(path = 'ego_model.pth')
+    # # # Load Ego Model
+    # if args.load_model:
+    #     ego_agent.load_model(path = 'ego_model.pth')
 
-    # # Learn Ego Model Initially
-    if args.learn:
-        ego_agent.learn(na_env, args.total_timesteps)
-    na_env.close()
+    # # # Learn Ego Model Initially
+    # if args.learn:
+    #     ego_agent.learn(na_env, args.total_timesteps)
+    # na_env.close()
 
-    # # Save Non-Adversarial Collision Trajectories
-    if args.save_trajectories:
-        ego_agent.trajectory_store.write(args.trajectories_folder+'/trajectories_E0_MOBIL', 'json')
+    # # # Save Non-Adversarial Collision Trajectories
+    # if args.save_trajectories:
+    #     ego_agent.trajectory_store.write(args.trajectories_folder+'/trajectories_E0_MOBIL', 'json')
 
-    # # Save Ego Model
-    if args.save_model:
-        ego_agent.save_model(path = 'ego_model.pth')
+    # # # Save Ego Model
+    # if args.save_model:
+    #     ego_agent.save_model(path = 'ego_model.pth')
 
     # 2. Test Ego Vehicle in Non-Adversarial Environment
     
-    # na_env = gym.make('crash-v0', config=na_env_cfg, render_mode='rgb_array')
-    # na_env.configure({'adversarial' : False})
-    # args.num_envs = 1
-    # ego_agent = DQN_Agent(na_env, args, device, adversarial = False, save_trajectories=args.save_trajectories)
-    # ego_agent.load_model(path = 'ego_model.pth')
-    # while True:
-    #     done = truncated = False
-    #     obs, info = na_env.reset()
-    #     ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
-    #     while not (done or truncated):
-    #         with torch.no_grad():
-    #             ego_action = torch.argmax(ego_agent.policy_net(ego_state))
-    #         obs, reward, done, truncated, info = na_env.step(ego_action)
-    #         ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
-    #         na_env.render()
+    ego_model0 = "E0_MOBIL.pth"
+    ego_models = [f"E{i}_V{i}_TrainEgo_True.pth" for i in range(1,6)]
+    ego_models = [ego_model0] + ego_models
+    na_env = gym.make('crash-v0', config=na_env_cfg, render_mode='rgb_array')
+    na_env.configure({'adversarial' : False})
+    args.num_envs = 1
+    for ego_version in range(0,6):
+        ego_agent = DQN_Agent(na_env, args, device, adversarial = False, save_trajectories=args.save_trajectories)
+        ego_agent.load_model(path = ego_models[ego_version])
+        while True:
+            done = truncated = False
+            obs, info = na_env.reset()
+            ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
+            while not (done or truncated):
+                with torch.no_grad():
+                    ego_action = torch.argmax(ego_agent.policy_net(ego_state))
+                obs, reward, done, truncated, info = na_env.step(ego_action)
+                ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
 
-    # na_env.close()
+    na_env.close()
 
     # 3. Test Ego Vehicle in Adversarial Environment/ Train Adversarial Agent
     # env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')

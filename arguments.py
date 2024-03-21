@@ -38,6 +38,8 @@ class Args:
     """whether to evaluate the model"""
     cycles: int = 2
     """the number of cycles for training"""
+    use_pool: bool = False
+    """the size of the npc pool"""
 
     # Environment specific arguments
     max_duration: int = 100
