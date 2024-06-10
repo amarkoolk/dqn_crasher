@@ -73,27 +73,27 @@ if __name__ == "__main__":
     ma_config = load_config("env_configs/multi_agent.yaml")
 
     # Create Vector Env with Non-Adversarial Rewards
-    # na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=False, record_dir='na_videos', record_every=100)
+    na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=False, record_dir='na_videos', record_every=100)
 
-    # # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
-    # ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories, multi_agent=False, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
+    # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
+    ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories, multi_agent=False, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
 
-    # # # Load Ego Model
-    # if args.load_model:
-    #     ego_agent.load_model(path = 'ego_model.pth')
+    # # Load Ego Model
+    if args.load_model:
+        ego_agent.load_model(path = 'ego_model.pth')
 
-    # # # Learn Ego Model Initially
-    # if args.learn:
-    #     ego_agent.learn(na_env, args.total_timesteps)
-    # na_env.close()
+    # # Learn Ego Model Initially
+    if args.learn:
+        ego_agent.learn(na_env, args.total_timesteps)
+    na_env.close()
 
-    # # # Save Non-Adversarial Collision Trajectories
-    # if args.save_trajectories:
-    #     ego_agent.trajectory_store.write(args.trajectories_folder+'/trajectories_E0_MOBIL', 'json')
+    # # Save Non-Adversarial Collision Trajectories
+    if args.save_trajectories:
+        ego_agent.trajectory_store.write(args.trajectories_folder+'/trajectories_E0_MOBIL', 'json')
 
-    # # # Save Ego Model
-    # if args.save_model:
-    #     ego_agent.save_model(path = 'ego_model.pth')
+    # # Save Ego Model
+    if args.save_model:
+        ego_agent.save_model(path = 'ego_model.pth')
 
     # 2. Test Ego Vehicle in Non-Adversarial Environment
     

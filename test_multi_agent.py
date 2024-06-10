@@ -33,7 +33,8 @@ def test_multi_agent():
             'ttc_x_reward' : 4,
             'ttc_y_reward' : 1,
             'crash_reward' : 400,
-            'tolerance' : 1e-3
+            'tolerance' : 1e-3,
+            "use_mobil": True
     }
     
     config = {
@@ -49,20 +50,28 @@ def test_multi_agent():
     #     monitor_gym=False,  # auto-upload the videos of agents playing the game
     #     save_code=True,  # optional
     # )
-    env = gym.make('highway-v0', config=env_config, render_mode='rgb_array')
+    env = gym.make('crash-v0', config=env_config, render_mode='rgb_array')
     # env = CrashResetWrapper(env)
     obs, info = env.reset()
     done = truncated = False
+    step = 0
     while True:
         done = truncated = False
+        if(step % 2 == 0):
+            env.configure({"use_mobil": True})
+        else:
+            env.configure({"use_mobil": False})
         obs, info = env.reset()
         while not (done or truncated):
             # Dispatch the observations to the model to get the tuple of actions
             action = env.action_space.sample()
+            # print(len(obs))
+            print(len(action))
             # Execute the actions
             next_obs, reward, done, truncated, info = env.step(action)
             obs = next_obs
             env.render()
+        step+=1
 
 if __name__ == "__main__":
     test_multi_agent()

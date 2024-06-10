@@ -20,24 +20,21 @@ import matplotlib.pyplot as plt
 
 
 class TrajectoryStore(object):
-    def __init__(self, num_envs: int, episode_interval : int = 5000, file_dir : str = 'trajectories'):
-        self.num_envs = num_envs
+    def __init__(self, episode_interval : int = 5000, file_dir : str = 'trajectories', ego_or_npc = 'EGO'):
         self.trajectories = {}
-        for i in range(num_envs):
-            self.trajectories[i] = None
+        self.trajectories = None
 
         self.episode_interval = episode_interval
         self.file_interval = 0
-        
-        if not os.path.exists(file_dir):
-            os.makedirs(file_dir)
 
-        self.file_dir = file_dir
+        self.file_dir = os.path.join(file_dir, ego_or_npc)
+        
+        if not os.path.exists(self.file_dir):
+            os.makedirs(self.file_dir)
+
         self.crash_trajectories = {}
 
-    def add(self, worker_id: int, transition: Transition, int_frames: np.ndarray):
-
-
+    def add(self, transition: Transition, int_frames: np.ndarray, ego_pool = None, npc_pool = None):
 
         state_history = np.vstack((transition.state, int_frames[:-1,:]))
 
@@ -59,19 +56,49 @@ class TrajectoryStore(object):
         reward_array[0] = transition.reward
         reward_array[1:] = 0.0
 
+        # Save Model Pool Data
+        if ego_pool is not None:
+            model_idx = ego_pool.model_idx
+            ego_pool_data = np.zeros((state_history.shape[0], 5))
+            ego_pool_data[0,0] = ego_pool.model_ep_freq[model_idx]
+            ego_pool_data[0,1] = ego_pool.model_crash_freq[model_idx]
+            ego_pool_data[0,2] = ego_pool.model_sr100[model_idx]
+            ego_pool_data[0,3] = ego_pool.model_elo[model_idx]
+            ego_pool_data[0,4] = ego_pool.opponent_elo
+            ego_pool_data[1:,0] = -1
+            ego_pool_data[1:,1] = -1
+            ego_pool_data[1:,2] = -1
+            ego_pool_data[1:,3] = -1
+            ego_pool_data[1:,4] = -1
+            state_history = np.column_stack((state_history, ego_pool_data))
+        elif npc_pool is not None:
+            model_idx = npc_pool.model_idx
+            npc_pool_data = np.zeros((state_history.shape[0], 5))
+            npc_pool_data[0,0] = npc_pool.model_ep_freq[model_idx]
+            npc_pool_data[0,1] = npc_pool.model_crash_freq[model_idx]
+            npc_pool_data[0,2] = npc_pool.model_sr100[model_idx]
+            npc_pool_data[0,3] = npc_pool.model_elo[model_idx]
+            npc_pool_data[0,4] = npc_pool.opponent_elo
+            npc_pool_data[1:,0] = -1
+            npc_pool_data[1:,1] = -1
+            npc_pool_data[1:,2] = -1
+            npc_pool_data[1:,3] = -1
+            npc_pool_data[1:,4] = -1
+            state_history = np.column_stack((state_history, npc_pool_data))
+
         save_data = np.column_stack((state_history, action_array, reward_array, ttc_x, ttc_y))
 
-        if self.trajectories[worker_id] is None:
-            self.trajectories[worker_id] = save_data
+        if self.trajectories is None:
+            self.trajectories = save_data
         else:
-            self.trajectories[worker_id] = np.vstack((self.trajectories[worker_id], save_data))
+            self.trajectories= np.vstack((self.trajectories, save_data))
 
-    def clear(self, worker_id: int):
-        self.trajectories[worker_id] = None
+    def clear(self):
+        self.trajectories = None
 
-    def save(self, worker_id: int, episode_num: int):
-        self.crash_trajectories[episode_num] = self.trajectories[worker_id].tolist()
-        self.clear(worker_id)
+    def save(self, episode_num: int):
+        self.crash_trajectories[episode_num] = self.trajectories.tolist()
+        self.clear()
 
         if len(self.crash_trajectories.keys()) % self.episode_interval == 0:
             file_path = os.path.join(self.file_dir, f'{self.file_interval}')
@@ -136,7 +163,7 @@ class DQN(nn.Module):
     
 class DQN_Agent(object):
 
-    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False, trajectory_path = 'trajectories', cycle = 0):
+    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False, trajectory_path = 'trajectories', cycle = 0, ego_or_npc = 'EGO'):
 
         # BATCH_SIZE is the number of transitions sampled from the replay buffer
         # GAMMA is the discount factor as mentioned in the previous section
@@ -161,25 +188,14 @@ class DQN_Agent(object):
 
         self.cycle = cycle
         
-        if self.num_envs > 1:
-            if self.multi_agent:
-                self.n_actions = env.single_action_space[0].n
-                state, _ = env.reset()
-                self.n_observations = len(state[0][0].flatten())
-            else:
-                self.n_actions = env.single_action_space.n
-                state, _ = env.reset()
-                print(state[0])
-                self.n_observations = len(state[0].flatten())
-        elif self.num_envs == 1:
-            if self.multi_agent:
-                self.n_actions = env.single_action_space[0].n
-                state, _ = env.reset()
-                self.n_observations = len(state[0].flatten())
-            else:
-                self.n_actions = env.single_action_space.n
-                state, _ = env.reset()
-                self.n_observations = len(state[0].flatten())
+        if self.multi_agent:
+            self.n_actions = env.action_space[0].n
+            state, _ = env.reset()
+            self.n_observations = len(state[0].flatten())
+        else:
+            self.n_actions = env.action_space.n
+            state, _ = env.reset()
+            self.n_observations = len(state[0].flatten())
 
         self.policy_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
         self.target_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
@@ -195,7 +211,7 @@ class DQN_Agent(object):
 
         self.save_trajectories = save_trajectories
         if save_trajectories:
-            self.trajectory_store = TrajectoryStore(self.num_envs, episode_interval = 1000, file_dir = trajectory_path)
+            self.trajectory_store = TrajectoryStore(episode_interval = 1000, file_dir = trajectory_path, ego_or_npc = ego_or_npc)
 
 
     def select_action(self, state, env, steps_done):
@@ -285,26 +301,25 @@ class DQN_Agent(object):
         
     def update(self, state, action, observation, reward, terminated):
 
-        next_state = torch.tensor(observation.reshape(self.num_envs,self.n_observations), dtype=torch.float32, device=self.device)
+        next_state = torch.tensor(observation.reshape(self.n_observations), dtype=torch.float32, device=self.device)
 
-        for worker in range(self.num_envs):
-            if terminated[worker]:
-                self.memory.push(state[worker].view(1,self.n_observations),action[worker].view(1,1),None,reward[worker].view(1,1))
-            else:
-                self.memory.push(state[worker].view(1,self.n_observations),action[worker].view(1,1),next_state[worker].view(1,self.n_observations),reward[worker].view(1,1))
+        if terminated:
+            self.memory.push(state.view(1,self.n_observations),action.view(1,1),None,reward.view(1,1))
+        else:
+            self.memory.push(state.view(1,self.n_observations),action.view(1,1),next_state.view(1,self.n_observations),reward.view(1,1))
 
-            state = next_state
+        state = next_state
 
-            # Perform one step of the optimization (on the policy network)
-            self.optimize_model()
+        # Perform one step of the optimization (on the policy network)
+        self.optimize_model()
 
-            # Soft update of the target network's weights
-            # θ′ ← τ θ + (1 −τ )θ′
-            target_net_state_dict = self.target_net.state_dict()
-            policy_net_state_dict = self.policy_net.state_dict()
-            for key in policy_net_state_dict:
-                target_net_state_dict[key] = policy_net_state_dict[key]*self.tau + target_net_state_dict[key]*(1-self.tau)
-            self.target_net.load_state_dict(target_net_state_dict)
+        # Soft update of the target network's weights
+        # θ′ ← τ θ + (1 −τ )θ′
+        target_net_state_dict = self.target_net.state_dict()
+        policy_net_state_dict = self.policy_net.state_dict()
+        for key in policy_net_state_dict:
+            target_net_state_dict[key] = policy_net_state_dict[key]*self.tau + target_net_state_dict[key]*(1-self.tau)
+        self.target_net.load_state_dict(target_net_state_dict)
 
         return state
 

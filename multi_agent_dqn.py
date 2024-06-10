@@ -18,7 +18,7 @@ import wandb
 import gymnasium as gym
 from dqn_agent import DQN, DQN_Agent, TrajectoryStore
 from model_pool import ModelPool
-from wandb_logging import initialize_logging
+from wandb_logging import initialize_logging, log_evaluation
 from config import load_config
 from create_env import make_env, make_vector_env
 
@@ -121,9 +121,9 @@ def multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_mo
                 # Save Trajectories that end in a Crash
                 if args.save_trajectories:
                     if info['final_info'][worker]['crashed']:
-                        ego_agent.trajectory_store.save(worker, ep_num)
-                    else:
                         ego_agent.trajectory_store.clear(worker)
+                    else:
+                        ego_agent.trajectory_store.save(worker, ep_num)
 
                 num_crashes.append(float(info['final_info'][worker]['crashed']))
                 if args.track:
@@ -188,9 +188,9 @@ def multi_agent_eval(ego_version, npc_version, ego_model, npc_model, env_config,
     if args.track:
         if wandb.run is not None:
             wandb.finish()
-            run = initialize_logging(args, ego_version, npc_version, False)
+            run = initialize_logging(args, ego_version, npc_version, False, True, sampling=args.sampling)
         else:
-            run = initialize_logging(args, ego_version, npc_version, False)
+            run = initialize_logging(args, ego_version, npc_version, False, True, sampling=args.sampling)
 
     
     num_crashes = []
@@ -248,10 +248,7 @@ def multi_agent_eval(ego_version, npc_version, ego_model, npc_model, env_config,
             if done[worker]:
                 # Save Trajectories that end in a Crash
                 if args.save_trajectories:
-                    if info['final_info'][worker]['crashed']:
-                        ego_agent.trajectory_store.save(worker, ep_num)
-                    else:
-                        ego_agent.trajectory_store.clear(worker)
+                    ego_agent.trajectory_store.save(worker, ep_num)
 
                 num_crashes.append(float(info['final_info'][worker]['crashed']))
                 if args.track:
@@ -305,15 +302,15 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
     if args.track:
         if wandb.run is not None:
             wandb.finish()
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=True, npc_pool_size=npc_pool.size, ego_pool_size=None)
+            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=True, npc_pool_size=npc_pool.size, ego_pool_size=None, sampling=args.sampling)
         else:
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=True, npc_pool_size=npc_pool.size, ego_pool_size=None)
+            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=True, npc_pool_size=npc_pool.size, ego_pool_size=None, sampling=args.sampling)
 
     
     num_crashes = []
-    episode_rewards = np.zeros(args.num_envs)
-    duration = np.zeros(args.num_envs)
-    episode_speed = np.zeros(args.num_envs)
+    episode_rewards = 0
+    duration = 0
+    episode_speed = 0
     ep_rew_total = np.zeros(0)
     ep_len_total = np.zeros(0)
     ep_speed_total = np.zeros(0)
@@ -321,96 +318,126 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
     t_step = 0
     ep_num = 0
 
-
-    obs, info = env.reset()
     # Choose a model from the pool every episode
     npc_pool.choose_model()
-    ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_agent.n_observations), dtype=torch.float32, device=device)
-    npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_pool.models[0].n_observations), dtype=torch.float32, device=device)
+    npc_mobil = npc_pool.models[npc_pool.model_idx] == 'mobil'
+    config = {"use_mobil": False}
+    if npc_mobil:
+        config["use_mobil"] = True
+    else:
+        config["use_mobil"] = False
+
+    env.configure(config)
+    obs, info = env.reset()
+
+    if(npc_mobil):
+        ego_state = torch.tensor(obs[0].reshape(ego_agent.n_observations), dtype=torch.float32, device=device)
+    else:
+        ego_state = torch.tensor(obs[0].reshape(ego_agent.n_observations), dtype=torch.float32, device=device)
+        npc_state = torch.tensor(obs[1].reshape(ego_agent.n_observations), dtype=torch.float32, device=device)
     
     # Testing Loop
     while t_step < args.total_timesteps:
-        
-        ego_action = torch.squeeze(ego_agent.select_action(ego_state, env, t_step))
-        npc_action = torch.squeeze(npc_pool.predict(npc_state))
+        if(npc_mobil):
+            ego_action = ego_agent.select_action(ego_state, env, t_step)
+        else:
+            ego_action = ego_agent.select_action(ego_state, env, t_step)
+            npc_action = npc_pool.predict(npc_state)
 
-        if args.num_envs == 1:
-            ego_action = ego_action.view(1,1)
-            npc_action = npc_action.view(1,1)
-
-        obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
+        if(npc_mobil):
+            obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(),))
+        else:
+            obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
 
         if done:
-            int_frames = info['final_info'][0]['int_frames']
+            int_frames = info['int_frames']
         else:
-            int_frames = info['int_frames'][0]
+            int_frames = info['int_frames']
 
         if args.save_trajectories:
-            for worker in range(args.num_envs):
-                if terminated[worker]:
-                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()), int_frames)
-                else:
-                    ego_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), obs[0][worker].flatten(), reward[worker].cpu().numpy()), int_frames)
+            if terminated:
+                ego_agent.trajectory_store.add(Transition(ego_state.cpu().numpy(), ego_action.cpu().numpy(), None, reward.cpu().numpy()), int_frames, None, npc_pool)
+            else:
+                ego_agent.trajectory_store.add(Transition(ego_state.cpu().numpy(), ego_action.cpu().numpy(), obs[0].flatten(), reward.cpu().numpy()), int_frames, None, npc_pool)
 
-
-        ego_state = ego_agent.update(ego_state, ego_action, obs[0], reward, terminated)
-        npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_pool.models[0].n_observations), dtype=torch.float32, device=device)
+        if(npc_mobil):
+            ego_state = torch.tensor(obs[0].reshape(ego_agent.n_observations), dtype=torch.float32, device=device)
+        else:
+            ego_state = ego_agent.update(ego_state, ego_action, obs[0], reward, terminated)
+            npc_state = torch.tensor(obs[1].reshape(npc_pool.models[0].n_observations), dtype=torch.float32, device=device)
 
         episode_rewards = episode_rewards + reward.cpu().numpy()
-        duration = duration + np.ones(args.num_envs)
-        episode_speed = episode_speed + np.linalg.norm(ego_state[:,3:5].cpu().numpy(), axis=1)
+        duration += 1
+        episode_speed += ego_state[3].cpu().numpy()
 
 
-        for worker in range(args.num_envs):
-            if done[worker]:
-                # Save Trajectories that end in a Crash
-                if args.save_trajectories:
-                    if info['final_info'][worker]['crashed']:
-                        ego_agent.trajectory_store.save(worker, ep_num)
-                    else:
-                        ego_agent.trajectory_store.clear(worker)
+        if done:
+            # Save Trajectories that end in a Crash
+            if args.save_trajectories:    
+                ego_agent.trajectory_store.clear()
 
-                num_crashes.append(float(info['final_info'][worker]['crashed']))
-                if args.track:
-                    ep_rew_total = np.append(ep_rew_total, episode_rewards[worker])
-                    ep_len_total = np.append(ep_len_total, duration[worker])
-                    ep_speed_total = np.append(ep_speed_total, episode_speed[worker]/duration[worker])
-                    if ep_rew_total.size > 100:
-                        ep_rew_total = np.delete(ep_rew_total, 0)
-                    if ep_len_total.size > 100:
-                        ep_len_total = np.delete(ep_len_total, 0)
-                    if ep_speed_total.size > 100:
-                        ep_speed_total = np.delete(ep_speed_total, 0)
+            num_crashes.append(float(info['crashed']))
+            if args.track:
+                ep_rew_total = np.append(ep_rew_total, episode_rewards)
+                ep_len_total = np.append(ep_len_total, duration)
+                ep_speed_total = np.append(ep_speed_total, episode_speed/duration)
+                if ep_rew_total.size > 100:
+                    ep_rew_total = np.delete(ep_rew_total, 0)
+                if ep_len_total.size > 100:
+                    ep_len_total = np.delete(ep_len_total, 0)
+                if ep_speed_total.size > 100:
+                    ep_speed_total = np.delete(ep_speed_total, 0)
 
-                    npc_pool.update_model_crashes(int(info['final_info'][worker]['crashed']))
+                # npc_pool.update_model_crashes(int(info['final_info'][worker]['crashed']))
+                # npc_pool.update_model_elo(1-int(info['final_info'][worker]['crashed']),int(info['final_info'][worker]['crashed']), info['final_info'][worker]['spawn_config'])
+                # npc_pool.update_probabilities(False)
 
-                    wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
-                            "rollout/ep_len_mean": ep_len_total.mean(),
-                            "rollout/num_crashes": num_crashes[-1],
-                            "rollout/sr100": np.mean(num_crashes[-100:]),
-                            "rollout/ego_speed_mean": ep_speed_total.mean()},
-                            step = ep_num)
+                wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
+                        "rollout/ep_len_mean": ep_len_total.mean(),
+                        "rollout/num_crashes": num_crashes[-1],
+                        "rollout/sr100": np.mean(num_crashes[-100:]),
+                        "rollout/ego_speed_mean": ep_speed_total.mean(),
+                        "rollout/opponent_elo": npc_pool.opponent_elo,
+                        "rollout/spawn_config": info['spawn_config']},
+                        step = ep_num)
 
-                    for idx, model in enumerate(npc_pool.models):
-                        wandb.log({f"rollout/model_{idx}_ep_freq": npc_pool.model_ep_freq[idx],
-                                    f"rollout/model_{idx}_transition_freq": npc_pool.model_transition_freq[idx],
-                                    f"rollout/model_{idx}_crash_freq": npc_pool.model_crash_freq[idx],
-                                    f"rollout/model_{idx}_sr100": npc_pool.model_sr100[idx]},
-                                    step = ep_num)
-                    
+                for idx, model in enumerate(npc_pool.models):
+                    wandb.log({f"rollout/model_{idx}_ep_freq": npc_pool.model_ep_freq[idx],
+                                f"rollout/model_{idx}_transition_freq": npc_pool.model_transition_freq[idx],
+                                f"rollout/model_{idx}_crash_freq": npc_pool.model_crash_freq[idx],
+                                f"rollout/model_{idx}_sr100": npc_pool.model_sr100[idx],
+                                f"rollout/model_{idx}_elo": npc_pool.model_elo[idx]},
+                                step = ep_num)
+                
 
-                episode_rewards[worker] = 0
-                duration[worker] = 0
-                episode_speed[worker] = 0
-                ep_num += 1
-                # Update Model Choice
-                npc_pool.choose_model()
+            episode_rewards = 0
+            duration = 0
+            episode_speed = 0
+            ep_num += 1
+            # Update Model Choice
+            npc_pool.choose_model()
+            npc_mobil = npc_pool.models[npc_pool.model_idx] == 'mobil'
+            config = {"use_mobil": False}
+            if npc_mobil:
+                config["use_mobil"] = True
+            else:
+                config["use_mobil"] = False
 
-            t_step += 1
-            pbar.update(1)
+            env.configure(config)
+            obs, info = env.reset()
+
+            if(npc_mobil):
+                ego_state = torch.tensor(obs[0].reshape(ego_agent.n_observations), dtype=torch.float32, device=device)
+            else:
+                ego_state = torch.tensor(obs[0].reshape(ego_agent.n_observations), dtype=torch.float32, device=device)
+                npc_state = torch.tensor(obs[1].reshape(ego_agent.n_observations), dtype=torch.float32, device=device)
+            
+
+        t_step += 1
+        pbar.update(1)
 
 
     if use_pbar:
@@ -439,112 +466,158 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
     if args.track:
         if wandb.run is not None:
             wandb.finish()
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, npc_pool_size=None, ego_pool_size=ego_pool.size)
+            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, npc_pool_size=None, ego_pool_size=ego_pool.size, sampling=args.sampling)
         else:
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, npc_pool_size=None, ego_pool_size=ego_pool.size)
+            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, npc_pool_size=None, ego_pool_size=ego_pool.size, sampling=args.sampling)
 
     
     num_crashes = []
-    episode_rewards = np.zeros(args.num_envs)
-    duration = np.zeros(args.num_envs)
-    episode_speed = np.zeros(args.num_envs)
-    ep_rew_total = np.zeros(0)
-    ep_len_total = np.zeros(0)
-    ep_speed_total = np.zeros(0)
+    ttc_x = []
+    ttc_y = []
+    ego_speed = []
+    npc_speed = []
+    episode_rewards = 0
+    duration = 0
+    ep_rew_total = 0
+    ep_len_total = 0
+    ep_speed_total = 0
 
     t_step = 0
     ep_num = 0
 
-
-    obs, info = env.reset()
     # Choose a model from the pool every episode
     ego_pool.choose_model()
-    ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_pool.models[0].n_observations), dtype=torch.float32, device=device)
-    npc_state = torch.tensor(obs[1].reshape(args.num_envs,npc_agent.n_observations), dtype=torch.float32, device=device)
+    ego_mobil = ego_pool.models[ego_pool.model_idx] == 'mobil'
+
+    config = {"use_mobil": False}
+    if ego_mobil:
+        config["use_mobil"] = True
+    else:
+        config["use_mobil"] = False
+
+    env.configure(config)
+    obs, info = env.reset()
+
+    if(ego_mobil):
+        npc_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+    else:
+        ego_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+        npc_state = torch.tensor(obs[1].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
     
+    if(ego_mobil == False):
+        print(ego_state)
     # Testing Loop
     while t_step < args.total_timesteps:
         
-        ego_action = torch.squeeze(ego_pool.predict(ego_state))
-        npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, t_step))
+        if(ego_mobil):
+            npc_action = npc_agent.select_action(npc_state, env, t_step)
+        else:
+            ego_action = ego_pool.predict(ego_state)
+            npc_action = npc_agent.select_action(npc_state, env, t_step)
 
-        if args.num_envs == 1:
-            ego_action = ego_action.view(1,1)
-            npc_action = npc_action.view(1,1)
-
-        obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
+        if(ego_mobil):
+            obs, reward, terminated, truncated, info = env.step((npc_action.cpu().numpy(),))
+        else:
+            obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
 
+
         if done:
-            int_frames = info['final_info'][0]['int_frames']
+            int_frames = info['int_frames']
         else:
-            int_frames = info['int_frames'][0]
+            int_frames = info['int_frames']
+            ttc_x.append(info['ttc_x'])
+            ttc_y.append(info['ttc_y'])
+
 
         if args.save_trajectories:
-            for worker in range(args.num_envs):
-                if terminated[worker]:
-                    npc_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()), int_frames)
-                else:
-                    npc_agent.trajectory_store.add(worker, Transition(ego_state[worker].cpu().numpy(), ego_action[worker].cpu().numpy(), obs[0][worker].flatten(), reward[worker].cpu().numpy()), int_frames)
+            if ego_mobil:
+                save_state = npc_state.cpu().numpy()
+                save_action = npc_action.cpu().numpy()
+            else:
+                save_state = ego_state.cpu().numpy()
+                save_action = ego_action.cpu().numpy()
+            save_reward = reward.cpu().numpy()
+            if terminated:
+                npc_agent.trajectory_store.add(Transition(save_state, save_action, None, save_reward), int_frames)
+            else:
+                npc_agent.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten(), save_reward), int_frames)
 
-
-        ego_state = torch.tensor(obs[0].reshape(args.num_envs,ego_pool.models[0].n_observations), dtype=torch.float32, device=device)
-        npc_state = npc_agent.update(npc_state, npc_action, obs[1], reward, terminated)
+        if(ego_mobil):
+            npc_state = npc_agent.update(npc_state, npc_action, obs[0], reward, terminated)
+        else:
+            ego_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+            npc_state = npc_agent.update(npc_state, npc_action, obs[1], reward, terminated)
 
         episode_rewards = episode_rewards + reward.cpu().numpy()
         duration = duration + np.ones(args.num_envs)
-        episode_speed = episode_speed + np.linalg.norm(ego_state[:,3:5].cpu().numpy(), axis=1)
+        if(ego_mobil):
+            npc_speed.append(npc_state[3].cpu().numpy())
+        else:
+            ego_speed.append(ego_state[3].cpu().numpy())
+            npc_speed.append(npc_state[3].cpu().numpy())
 
+        if done:
+            # Save Trajectories that end in a Crash
+            if args.save_trajectories:
+                npc_agent.trajectory_store.save(ep_num)
 
-        for worker in range(args.num_envs):
-            if done[worker]:
-                # Save Trajectories that end in a Crash
-                if args.save_trajectories:
-                    if info['final_info'][worker]['crashed']:
-                        npc_agent.trajectory_store.save(worker, ep_num)
-                    else:
-                        npc_agent.trajectory_store.clear(worker)
+            num_crashes.append(float(info['crashed']))
+            if args.track:
+                ep_rew_total = np.append(ep_rew_total, episode_rewards)
+                ep_len_total = np.append(ep_len_total, duration)
 
-                num_crashes.append(float(info['final_info'][worker]['crashed']))
-                if args.track:
-                    ep_rew_total = np.append(ep_rew_total, episode_rewards[worker])
-                    ep_len_total = np.append(ep_len_total, duration[worker])
-                    ep_speed_total = np.append(ep_speed_total, episode_speed[worker]/duration[worker])
-                    if ep_rew_total.size > 100:
-                        ep_rew_total = np.delete(ep_rew_total, 0)
-                    if ep_len_total.size > 100:
-                        ep_len_total = np.delete(ep_len_total, 0)
-                    if ep_speed_total.size > 100:
-                        ep_speed_total = np.delete(ep_speed_total, 0)
+                # ego_pool.update_model_crashes(int(info['final_info'][worker]['crashed']))
+                # ego_pool.update_model_elo(int(info['final_info'][worker]['crashed']),1-int(info['final_info'][worker]['crashed']), info['final_info'][worker]['spawn_config'])
+                # ego_pool.update_probabilities(True)
 
-                    ego_pool.update_model_crashes(int(info['final_info'][worker]['crashed']))
+                wandb.log({"rollout/ep_rew_mean": np.mean(episode_rewards),
+                        "rollout/ep_len_mean": ep_len_total.mean(),
+                        "rollout/num_crashes": num_crashes[-1],
+                        "rollout/sr100": np.mean(num_crashes[-100:]),
+                        "rollout/ego_speed_mean": np.mean(ego_speed),
+                        "rollout/npc_speed_mean": np.mean(npc_speed),
+                        "rollout/opponent_elo": ego_pool.opponent_elo,
+                        "rollout/ttc_x": np.mean(ttc_x),
+                        "rollout/ttc_y": np.mean(ttc_y),
+                        "rollout/spawn_config": info['spawn_config']},
+                        step = ep_num)
 
-                    wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
-                            "rollout/ep_len_mean": ep_len_total.mean(),
-                            "rollout/num_crashes": num_crashes[-1],
-                            "rollout/sr100": np.mean(num_crashes[-100:]),
-                            "rollout/ego_speed_mean": ep_speed_total.mean()},
-                            step = ep_num)
+                for idx, model in enumerate(ego_pool.models):
+                    wandb.log({f"rollout/model_{idx}_ep_freq": ego_pool.model_ep_freq[idx],
+                                f"rollout/model_{idx}_transition_freq": ego_pool.model_transition_freq[idx],
+                                f"rollout/model_{idx}_crash_freq": ego_pool.model_crash_freq[idx],
+                                f"rollout/model_{idx}_sr100": ego_pool.model_sr100[idx],
+                                f"rollout/model_{idx}_elo": ego_pool.model_elo[idx]},
+                                step = ep_num)
+                
+            ttc_x = []
+            ttc_y = []
+            episode_rewards = 0
+            duration = 0
+            ep_num += 1
+            # Update Model Choice
+            ego_pool.choose_model()
+            ego_mobil = ego_pool.models[ego_pool.model_idx] == 'mobil'
+            config = {"use_mobil": False}
+            if ego_mobil:
+                config["use_mobil"] = True
+            else:
+                config["use_mobil"] = False
 
-                    for idx, model in enumerate(ego_pool.models):
-                        wandb.log({f"rollout/model_{idx}_ep_freq": ego_pool.model_ep_freq[idx],
-                                    f"rollout/model_{idx}_transition_freq": ego_pool.model_transition_freq[idx],
-                                    f"rollout/model_{idx}_crash_freq": ego_pool.model_crash_freq[idx],
-                                    f"rollout/model_{idx}_sr100": ego_pool.model_sr100[idx]},
-                                    step = ep_num)
-                    
+            env.configure(config)
+            obs, info = env.reset()
 
-                episode_rewards[worker] = 0
-                duration[worker] = 0
-                episode_speed[worker] = 0
-                ep_num += 1
-                # Update Model Choice
-                ego_pool.choose_model()
+            if(ego_mobil):
+                npc_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+            else:
+                ego_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+                npc_state = torch.tensor(obs[1].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
 
-            t_step += 1
-            pbar.update(1)
+        t_step += 1
+        pbar.update(1)
 
 
     if use_pbar:
@@ -557,4 +630,102 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
         npc_agent.trajectory_store.write(file_path, 'json')
 
     wandb.finish()
+    env.close()
+
+def pool_evaluation(env, cycle, ego_pool : ModelPool, npc_pool : ModelPool, args, device, ego: bool, use_pbar = True, n_obs = 25):
+
+    not_ego = not ego
+    ego_eval = ego_pool.init_eval(args.evaluation_episodes, latest_model=ego)
+    npc_eval = npc_pool.init_eval(args.evaluation_episodes, latest_model=not_ego)
+
+    ego_pool.set_opponent_elo(npc_pool.model_elo[npc_pool.model_idx])
+    npc_pool.set_opponent_elo(ego_pool.model_elo[ego_pool.model_idx])
+
+
+    n_egos = ego_pool.size
+    n_npcs = npc_pool.size
+    n_agents = n_npcs if ego else n_egos
+
+    if use_pbar:
+        pbar = tqdm(total=args.evaluation_episodes*(n_agents))
+    else:
+        pbar = None
+
+    ep_num = 0
+
+
+    ego_state = None
+    npc_state = None
+    
+    # Testing Loop
+    while ego_eval or npc_eval:
+        done = False
+
+        ego_mobil = ego_pool.models[ego_pool.model_idx] == 'mobil'
+        npc_mobil = npc_pool.models[npc_pool.model_idx] == 'mobil'
+
+        config = {"use_mobil": False}
+        if(ego_mobil or npc_mobil):
+            config["use_mobil"] = True
+        else:
+            config["use_mobil"] = False
+
+        env.configure(config)
+        obs, info = env.reset()
+
+
+        if(ego_mobil):
+            npc_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+        elif(npc_mobil):
+            ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+        else:
+            ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+            npc_state = torch.tensor(obs[1].reshape(n_obs), dtype=torch.float32, device=device)
+
+        while not done:
+            if(ego_mobil):
+                npc_action = npc_pool.predict(npc_state)
+            elif(npc_mobil):
+                ego_action = ego_pool.predict(ego_state)
+            else:
+                ego_action = ego_pool.predict(ego_state)
+                npc_action = npc_pool.predict(npc_state)
+
+            if(ego_mobil):
+                obs, reward, terminated, truncated, info = env.step((npc_action.cpu().numpy(),))
+            elif(npc_mobil):
+                obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(),))
+            else:
+                obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
+
+            done = terminated | truncated
+
+            if(ego_mobil):
+                npc_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+            elif(npc_mobil):
+                ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+            else:
+                ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+                npc_state = torch.tensor(obs[1].reshape(n_obs), dtype=torch.float32, device=device)
+
+            if done:
+                crash = int(info['crashed'])
+                ego_pool.update_model_elo(crash,1-crash)
+                npc_pool.update_model_elo(1-crash,crash)
+
+                ego_pool.log_model_pool(cycle, ep_num, npc_pool.model_idx, crash, 1-crash)
+                npc_pool.log_model_pool(cycle, ep_num, ego_pool.model_idx, 1-crash, crash)
+
+                ego_eval = ego_pool.choose_eval_opponent(randomized=True)
+                npc_eval = npc_pool.choose_eval_opponent(randomized=True)
+
+                ego_pool.set_opponent_elo(npc_pool.model_elo[npc_pool.model_idx])
+                npc_pool.set_opponent_elo(ego_pool.model_elo[ego_pool.model_idx])
+
+                ep_num += 1
+                pbar.update(1)
+
+    if use_pbar:
+        pbar.close()
+        
     env.close()

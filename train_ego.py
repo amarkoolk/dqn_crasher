@@ -16,7 +16,10 @@ from arguments import Args
 from crash_wrappers import CrashRewardWrapper, CrashResetWrapper
 from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 from create_env import make_vector_env
-from DQN_Agent import DQN
+from dqn_agent import DQN
+
+from config import load_config
+
 
 
 
@@ -73,7 +76,7 @@ if __name__ == "__main__":
             "ReplayBuffer": args.buffer_type
             }
         )
-
+    save_model = args.save_model
     # BATCH_SIZE is the number of transitions sampled from the replay buffer
     # GAMMA is the discount factor as mentioned in the previous section
     # EPS_START is the starting value of epsilon
@@ -89,35 +92,11 @@ if __name__ == "__main__":
     TAU = args.tau
     LR = args.learning_rate
 
-
-    env_config = {
-        "observation": {
-            "type": "Kinematics",
-            "normalize": False
-        },
-        "action": {
-            "type": "DiscreteMetaAction",
-            "target_speeds": list(range(15,35))
-        },
-        "lanes_count" : 2,
-        "vehicles_count" : 1,
-        "duration" : args.max_duration,
-        "initial_lane_id" : None,
-        "policy_frequency": 1,
-        # Reset Configs
-        'spawn_configs' : ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center'],
-        'mean_distance' : 20,
-        'initial_speed' : 20,
-        'mean_delta_v' : 0,
-        # Crash Configs
-        'ttc_x_reward' : args.ttc_x_reward,
-        'ttc_y_reward' : args.ttc_y_reward,
-        'crash_reward' : args.crash_reward,
-        'tolerance' : 1e-3
-    }
+    env_config = load_config("env_configs/single_agent.yaml")
 
     # Create Vector Env with Adversarial Rewards
-    env = make_vector_env(env_config, num_envs = args.num_envs, adversarial = args.adversarial)
+    env = gym.make('highway-v0', render_mode='rgb_array')
+    env.configure(env_config)
 
 
     if args.cuda:
@@ -128,7 +107,7 @@ if __name__ == "__main__":
         device = torch.device("cpu")
 
     # Get number of actions from gym action space
-    n_actions = env.single_action_space.n
+    n_actions = env.action_space.n
     # Get the number of state observations
     state, info = env.reset()
     n_observations = len(state[0].flatten())
@@ -284,8 +263,8 @@ if __name__ == "__main__":
             if t_step >= max_steps:
                 break
 
-        # if save_model:
-        #     torch.save(policy_net.state_dict(), wandb.run.dir + "/model-{}.pt".format(len(episode_rewards)))
+        if save_model:
+            torch.save(policy_net.state_dict(), "model-{}.pt".format(len(episode_rewards)))
 
     print('Complete')
     env.close()

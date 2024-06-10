@@ -40,6 +40,12 @@ class Args:
     """the number of cycles for training"""
     use_pool: bool = False
     """the size of the npc pool"""
+    sampling: str = "uniform"
+    """the sampling method for the model pool"""
+    adjustable_k: bool = False
+    """whether to use adjustable k factor for ELO"""
+    evaluation_episodes: int = 100
+    """the number of episodes for evaluation"""
 
     # Environment specific arguments
     max_duration: int = 100

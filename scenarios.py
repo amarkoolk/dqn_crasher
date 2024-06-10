@@ -15,8 +15,98 @@ class Scenario:
   def set_state(self, state):
     raise NotImplementedError
   
+  def reset(self):
+    raise NotImplementedError
+  
   def get_action(self):
     raise NotImplementedError
+  
+class Slowdown(Scenario):
+
+  def __init__(self):
+    self.state = None
+    self.end_frames = 0
+    self.prev_action = Action.IDLE.value
+    self.spawn_configs = ['forward_left', 'forward_right']
+
+  def reset(self, obs : np.ndarray, info : dict):
+    self.state = None
+    self.end_frames = 0
+    self.prev_action = Action.IDLE.value
+
+    ego_x = obs[0][0,0,1]
+    ego_y = obs[0][0,0,2]
+    npc_x = obs[1][0,0,1]
+    npc_y = obs[1][0,0,2]
+
+    self.set_state(ego_x, ego_y, npc_x, npc_y)
+
+  def set_state(self, ego_x : float, ego_y: float, npc_x : float, npc_y : float):
+    self.ego_x = ego_x
+    self.ego_y = ego_y
+    self.npc_x = npc_x
+    self.npc_y = npc_y
+
+  def get_action(self):
+    return Action.SLOWER.value
+  
+class SlowdownSameLane(Scenario):
+
+  def __init__(self):
+    self.state = None
+    self.end_frames = 0
+    self.prev_action = Action.IDLE.value
+    self.spawn_configs = ['forward_center']
+
+  def reset(self, obs : np.ndarray, info : dict):
+    self.state = None
+    self.end_frames = 0
+    self.prev_action = Action.IDLE.value
+
+    ego_x = obs[0][0,0,1]
+    ego_y = obs[0][0,0,2]
+    npc_x = obs[1][0,0,1]
+    npc_y = obs[1][0,0,2]
+
+    self.set_state(ego_x, ego_y, npc_x, npc_y)
+
+  def set_state(self, ego_x : float, ego_y: float, npc_x : float, npc_y : float):
+    self.ego_x = ego_x
+    self.ego_y = ego_y
+    self.npc_x = npc_x
+    self.npc_y = npc_y
+
+  def get_action(self):
+    return Action.SLOWER.value
+  
+class SpeedUp(Scenario):
+
+  def __init__(self):
+    self.state = None
+    self.end_frames = 0
+    self.prev_action = Action.IDLE.value
+    self.spawn_configs = ['behind_left', 'behind_right']
+
+  def reset(self, obs : np.ndarray, info : dict):
+    self.state = None
+    self.end_frames = 0
+    self.prev_action = Action.IDLE.value
+
+    ego_x = obs[0][0,0,1]
+    ego_y = obs[0][0,0,2]
+    npc_x = obs[1][0,0,1]
+    npc_y = obs[1][0,0,2]
+
+    self.set_state(ego_x, ego_y, npc_x, npc_y)
+
+  def set_state(self, ego_x : float, ego_y: float, npc_x : float, npc_y : float):
+    self.ego_x = ego_x
+    self.ego_y = ego_y
+    self.npc_x = npc_x
+    self.npc_y = npc_y
+
+  def get_action(self):
+    return Action.FASTER.value
   
 class CutIn(Scenario):
 
@@ -32,6 +122,7 @@ class CutIn(Scenario):
     self.state = None
     self.end_frames = 0
     self.prev_action = Action.IDLE.value
+    self.spawn_configs = ['behind_left', 'behind_right', 'behind_center']
 
   def reset(self, obs : np.ndarray, info : dict):
     self.current_maneuver = self.CutInManeuver.EVADE

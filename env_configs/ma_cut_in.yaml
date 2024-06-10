@@ -26,7 +26,7 @@ action:
 controlled_vehicles: 2
 duration: 40
 initial_lane_id: null
-initial_speed: 20
+initial_speed: 25
 lanes_count: 2
 mean_delta_v: 0
 mean_distance: 20

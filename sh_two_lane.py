@@ -18,7 +18,8 @@ import wandb
 import gymnasium as gym
 from dqn_agent import DQN, DQN_Agent, TrajectoryStore
 from model_pool import ModelPool
-from multi_agent_dqn import multi_agent_training_loop, multi_agent_eval, ego_vs_npc_pool, npc_vs_ego_pool
+from multi_agent_dqn import multi_agent_training_loop, multi_agent_eval, ego_vs_npc_pool, npc_vs_ego_pool, pool_evaluation
+from multi_agent_pool import multi_agent_loop
 from wandb_logging import initialize_logging
 from config import load_config
 from create_env import make_env, make_vector_env
@@ -43,7 +44,7 @@ if __name__ == "__main__":
 
     if args.eval == False and args.use_pool == False:
         ego_model = "E0_MOBIL.pth"
-        npc_model = "npc_model.pth"
+        npc_model = "NPC_V_MOBIL.pth"
 
         cycles = args.cycles
         ego_version = 0
@@ -64,60 +65,119 @@ if __name__ == "__main__":
     elif args.eval == False and args.use_pool == True:
 
         ego_model = "E0_MOBIL.pth"
-        npc_model = "npc_model.pth"
+        # ego_model = ""
+        npc_model = "NPC_V_MOBIL.pth"
         cycles = args.cycles
         ego_version = 0
         npc_version = 0
 
-        ego_pool = ModelPool()
-        npc_pool = ModelPool()
+        ego_pool = ModelPool(args.sampling, args.adjustable_k)
+        npc_pool = ModelPool(args.sampling, args.adjustable_k)
+        ego_elo = 1000
+        npc_elo = 1000
+
+        baseline_model = 'mobil'
+
+        
+        
+
 
 
         for cycle in range(cycles):
-            ma_config['adversarial'] = True
-            ma_config['normalize_reward'] = False
-            ma_config['collision_reward'] = 400
-            env = make_vector_env(ma_config, args.num_envs, record_video=False, record_dir='', record_every=100)
-            train_ego = False
-            npc_version +=1
-            trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_{train_ego}'
-            ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path)
-            ego_agent.load_model(path = ego_model)
-            npc_agent = DQN_Agent(env, args, device, save_trajectories = False, multi_agent=True)
-            npc_agent.load_model(path = npc_model)
-            npc_agent.cycle = cycle
+            
 
-            ego_pool.add_model(ego_agent)
-
-            npc_vs_ego_pool(env, npc_agent, ego_pool, args, device, ego_version, npc_version)
-            npc_model = f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth"
-
-            # Change Environment to Reward Collision Avoidance
             ma_config['adversarial'] = False
             ma_config['normalize_reward'] = True
             ma_config['collision_reward'] = -1
-            env = make_vector_env(ma_config, args.num_envs, record_video=False, record_dir='', record_every=100)
-
-            npc_pool.add_model(npc_agent)
+            env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
             train_ego = True
-            ego_version += 1
+            ego_version +=1
+            trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_{train_ego}'
+            ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO')
+            ego_agent.load_model(path = ego_model)
+            npc_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='NPC')
+            npc_agent.load_model(path = npc_model)
+            npc_agent.cycle = cycle
+
+            if cycle == 0:
+                ego_pool.add_model(baseline_model, 1000.0, 1000.0)
+                npc_pool.add_model(npc_agent, 1000.0, 1000.0)
+                print("Evaluation...")
+                env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+                pool_evaluation(env, -1, ego_pool, npc_pool, args, device, False)
+                env.close()
+                print(f"Ego ELOS: {ego_pool.model_elo}")
+                print(f"NPC ELOS: {npc_pool.model_elo}")
+
+                env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+
+            
             ego_vs_npc_pool(env, ego_agent, npc_pool, args, device, ego_version, npc_version)
             ego_model = f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth"
+            ego_elo = npc_pool.opponent_elo
+            ego_pool.add_model(ego_agent, 1000.0, 1000.0)
+            print(f"EGO ELO: {ego_elo}")
+
+            env.close()
+            print("Evaluation...")
+            env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+            pool_evaluation(env, cycle+1, ego_pool, npc_pool, args, device, True)
+            env.close()
+
+            ego_pool.set_opponent_elo(npc_pool.model_elo[-1])
+            npc_pool.set_opponent_elo(ego_pool.model_elo[-1])
+            ego_pool.update_probabilities(True)
+            npc_pool.update_probabilities(False)
+
+            print(f"Ego ELOS: {ego_pool.model_elo}")
+            print(f"NPC ELOS: {npc_pool.model_elo}")
+
+            # Change Environment to Reward Collision Avoidance
+            ma_config['adversarial'] = True
+            ma_config['normalize_reward'] = False
+            ma_config['collision_reward'] = 400
+            env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+
+            train_ego = False
+            npc_version += 1
+            npc_vs_ego_pool(env, npc_agent, ego_pool, args, device, ego_version, npc_version)
+            npc_model = f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth"
+            npc_elo = ego_pool.opponent_elo
+            npc_pool.add_model(npc_agent, 1000.0, 1000.0)
+            print(f"NPC ELO: {npc_elo}")
+
+            print("Evaluation...")
+            env.close()
+            env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+            pool_evaluation(env, cycle+1+0.5, ego_pool, npc_pool, args, device, False)
+
+            ego_pool.set_opponent_elo(npc_pool.model_elo[-1])
+            npc_pool.set_opponent_elo(ego_pool.model_elo[-1])
+            ego_pool.update_probabilities(True)
+            npc_pool.update_probabilities(False)
+
+            print(f"Ego ELOS: {ego_pool.model_elo}")
+            print(f"NPC ELOS: {npc_pool.model_elo}")
 
         ego_pool.end_pool()
         npc_pool.end_pool()
 
+        print(ego_pool.model_pool_log)
+
+        ego_pool.write_model_pool_log(f'ego_pool_all_{args.start_e}.json')
+        npc_pool.write_model_pool_log(f'npc_pool_all_{args.start_e}.json')
+
         env.close()
+
     else:
         ego_model = "E0_MOBIL.pth"
-        npc_model = "E0_V0_TrainEgo_False.pth"
-
+        model_dir = 'trained_models/behind_only_15/'
         ego_models = []
         npc_models = []
         ego_models.append(ego_model)
         for i in range(1,args.cycles+1):
-            ego_models.append(f"E{i}_V{i}_TrainEgo_True.pth")
-            npc_models.append(f"E{i-1}_V{i}_TrainEgo_False.pth")
+            ego_models.append(model_dir + f"E{i}_V{i}_TrainEgo_True.pth")
+            npc_models.append(model_dir + f"E{i-1}_V{i}_TrainEgo_False.pth")
 
         for ego_version in range(len(ego_models)):
             for npc_version in range(len(npc_models)):

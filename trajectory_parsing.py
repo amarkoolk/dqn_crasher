@@ -8,12 +8,31 @@ from matplotlib.patches import Rectangle
 
 import json
 import time
+from enum import Enum
 
+class Action(Enum):
+  LANE_LEFT = 0
+  IDLE = 1
+  LANE_RIGHT = 2
+  FASTER = 3
+  SLOWER = 4
 
-def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
+def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num):
 
+    action_string = ''
+
+    # fig = plt.figure()
+    # plt.plot(episode_array[:,3])
+    # plt.show()
+
+    print(f'Episode Array Shape: {episode_array.shape}')
     for i in range(episode_array.shape[0]):
-        start_time = time.monotonic_ns()
+        if i%frame_rate == 0:
+            action_value = episode_array[i,-4]
+            action_type = Action(action_value).name
+            action_string = f'{action_type}'
+            print(f'Episode: {episode_num}, Frame: {i}, Action: {episode_array[i,-4]}')
+            continue
 
         ego_x = episode_array[i,1]
         ego_y = episode_array[i,2]
@@ -25,8 +44,18 @@ def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
         npc_vx = episode_array[i,8] + episode_array[i,3]
         npc_vy = episode_array[i,9] + episode_array[i,4]
 
+        print(f'Ego: {ego_vx:.2f}, {ego_vy:.2f}')
+        print(f'NPC: {npc_vx:.2f}, {npc_vy:.2f}')
+
         ttcx = episode_array[i,-2]
         ttcy = episode_array[i,-1]
+
+        ttcx_string = f'{ttcx:.2f}'
+        ttcy_string = f'{ttcy:.2f}'
+        if abs(ttcx) > 1000:
+            ttcx_string = 'INF'
+        if abs(ttcy) > 1000:
+            ttcy_string = 'INF'
 
         # Rectangles
         ego_centroid = (ego_x, ego_y)
@@ -47,8 +76,9 @@ def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
 
         # Modified lines with individual colors for TTCX and TTCY
         axes.text(0.1, 0.99, f'Episode: {episode_num}, ', fontsize=12, ha='left', va='top', transform=axes.transAxes)
-        axes.text(0.3, 0.99, f'TTCX: {ttcx:.2f}', fontsize=12, ha='left', va='top', color='green', transform=axes.transAxes)
-        axes.text(0.5, 0.99, f'TTCY: {ttcy:.2f}', fontsize=12, ha='left', va='top', color='purple', transform=axes.transAxes)
+        axes.text(0.3, 0.99, f'TTCX: {ttcx_string}', fontsize=12, ha='left', va='top', color='green', transform=axes.transAxes)
+        axes.text(0.5, 0.99, f'TTCY: {ttcy_string}', fontsize=12, ha='left', va='top', color='purple', transform=axes.transAxes)
+        axes.text(0.7, 0.99, f'Ego Action: {action_string}', fontsize=12, ha='left', va='top', color='purple', transform=axes.transAxes)
 
         min_y = -10
         max_y = 14
@@ -62,18 +92,18 @@ def plot_trajectories(episode_array, dt, axes, time_buffer, episode_num):
         axes.hlines(-2, min_x - 5, max_x + 5, colors='k')
         axes.hlines(2, min_x - 5, max_x + 5, colors='k', linestyles='dashed')
         axes.hlines(6, min_x - 5, max_x + 5, colors='k')
-        if len(time_buffer) == 0:
-            time_to_sleep = 0.01
+        time_to_sleep = 0.01
+        if i == 1:
+            plt.waitforbuttonpress()
         else:
-            time_to_sleep = min(dt - np.mean(time_buffer),0.01)
-        plt.pause(time_to_sleep)
+            plt.pause(time_to_sleep)
+        # plt.pause(time_to_sleep)
         axes.clear()
-        end_time = time.monotonic_ns()
-        time_buffer.append((end_time - start_time)/1e9)
+        plt.draw()
 
 
-trajectory_path = 'trajectories/E0_V0_TrainEgo_False'
-file_name = '0.json'
+trajectory_path = 'fixed_npc_behind_left/E0_V1_TrainEgo_False/NPC'
+file_name = '1.json'
 
 with open(os.path.join(trajectory_path, file_name), 'r') as f:
     data = json.load(f)
@@ -81,11 +111,18 @@ with open(os.path.join(trajectory_path, file_name), 'r') as f:
 episode_keys = list(data.keys())
 num_episodes = len(episode_keys)
 
-dt = 1/15
+framerate = 15
 
 fig, axes = plt.subplots(1, 1, figsize=(15, 6))
 time_buffer = []
 
+
+# # Play Specific Episode
+# episode_num = 300
+# episode_array = np.asarray(data[episode_keys[episode_num]])
+# plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[episode_num])
+
+# Play all episodes
 for i in np.arange(0, num_episodes, 100):
     episode_array = np.asarray(data[episode_keys[i]])
-    plot_trajectories(episode_array, dt, axes, time_buffer, episode_keys[i])
+    plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[i])

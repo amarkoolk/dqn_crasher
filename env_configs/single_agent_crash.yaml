@@ -21,7 +21,7 @@ action:
   - 33
   - 34
   type: DiscreteMetaAction
-crash_reward: 400
+collision_reward: 400
 duration: 40
 initial_lane_id: null
 initial_speed: 20
@@ -44,4 +44,6 @@ spawn_configs:
 tolerance: 0.001
 ttc_x_reward: 4
 ttc_y_reward: 1
+adversarial: True
+normalize_reward: False
 vehicles_count: 1

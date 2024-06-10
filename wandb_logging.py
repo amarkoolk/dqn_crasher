@@ -1,6 +1,6 @@
 import wandb
 
-def initialize_logging(args, ego_version = None, npc_version = None, train_ego = None, eval = False, npc_pool_size = None, ego_pool_size = None):
+def initialize_logging(args, ego_version = None, npc_version = None, train_ego = None, eval = False, npc_pool_size = None, ego_pool_size = None, sampling = None):
     if wandb.run is not None:
         wandb.finish()
 
@@ -21,7 +21,8 @@ def initialize_logging(args, ego_version = None, npc_version = None, train_ego =
                 "eps_decay": args.decay_e,
                 "tau": args.tau,
                 "ReplayBuffer": args.buffer_type,
-                "eval": eval
+                "eval": eval,
+                "adjustable_k": args.adjustable_k
     }
 
     if ego_version is not None:
@@ -40,7 +41,28 @@ def initialize_logging(args, ego_version = None, npc_version = None, train_ego =
         run_config['ego_pool_size'] = ego_pool_size
     else:
         run_config['ego_pool'] = False
+
+    if sampling is not None:
+        run_config['model_sampling'] = sampling
     
+        
+    run = wandb.init(
+            # set the wandb project where this run will be logged
+            project=args.wandb_project_name,
+            
+            # track hyperparameters and run metadata
+            config=run_config
+        )
+    return run
+
+def log_evaluation(args, n_cycle):
+    if wandb.run is not None:
+        wandb.finish()
+
+
+    run_config ={
+        "cycle": n_cycle
+    }
         
     run = wandb.init(
             # set the wandb project where this run will be logged
