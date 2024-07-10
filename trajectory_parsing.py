@@ -102,8 +102,8 @@ def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num)
         plt.draw()
 
 
-trajectory_path = 'fixed_npc_behind_left/E0_V1_TrainEgo_False/NPC'
-file_name = '1.json'
+trajectory_path = 'complete_cycle_1.0_bl_two_model/E1_V0_TrainEgo_True/NPC'
+file_name = '3.json'
 
 with open(os.path.join(trajectory_path, file_name), 'r') as f:
     data = json.load(f)
@@ -123,6 +123,6 @@ time_buffer = []
 # plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[episode_num])
 
 # Play all episodes
-for i in np.arange(0, num_episodes, 100):
+for i in np.arange(0, num_episodes, 10):
     episode_array = np.asarray(data[episode_keys[i]])
     plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[i])

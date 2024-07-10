@@ -163,7 +163,7 @@ class DQN(nn.Module):
     
 class DQN_Agent(object):
 
-    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False, trajectory_path = 'trajectories', cycle = 0, ego_or_npc = 'EGO'):
+    def __init__(self, env, args, device = 'cpu', save_trajectories = False, multi_agent = False, trajectory_path = 'trajectories', cycle = 0, ego_or_npc = 'EGO', override_obs = -1):
 
         # BATCH_SIZE is the number of transitions sampled from the replay buffer
         # GAMMA is the discount factor as mentioned in the previous section
@@ -196,6 +196,9 @@ class DQN_Agent(object):
             self.n_actions = env.action_space.n
             state, _ = env.reset()
             self.n_observations = len(state[0].flatten())
+
+        if override_obs != -1:
+            self.n_observations = override_obs
 
         self.policy_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
         self.target_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
@@ -240,11 +243,13 @@ class DQN_Agent(object):
             idxs, transitions, is_weights = self.memory.sample(self.batch_size)
         else:
             transitions = self.memory.sample(self.batch_size)
+
         
         # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
         # detailed explanation). This converts batch-array of Transitions
         # to Transition of batch-arrays.
         batch = Transition(*zip(*transitions))
+
 
         # Compute a mask of non-final states and concatenate the batch elements
         # (a final state would've been the one after which simulation ended)
@@ -299,14 +304,12 @@ class DQN_Agent(object):
         else:
             return self.policy_net(state).max(1)[1].view(self.num_envs, 1)
         
-    def update(self, state, action, observation, reward, terminated):
-
-        next_state = torch.tensor(observation.reshape(self.n_observations), dtype=torch.float32, device=self.device)
+    def update(self, state, action, next_state, reward, terminated):
 
         if terminated:
-            self.memory.push(state.view(1,self.n_observations),action.view(1,1),None,reward.view(1,1))
+            self.memory.push(state,action.view(1,1),None,reward.view(1,1))
         else:
-            self.memory.push(state.view(1,self.n_observations),action.view(1,1),next_state.view(1,self.n_observations),reward.view(1,1))
+            self.memory.push(state,action.view(1,1),next_state,reward.view(1,1))
 
         state = next_state
 
@@ -323,20 +326,22 @@ class DQN_Agent(object):
 
         return state
 
-    def learn(self, env, total_timesteps, use_pbar = True):
+    def learn(self, env, args, use_pbar = True):
         if use_pbar:
-            pbar = tqdm(total=total_timesteps)
+            pbar = tqdm(total=args.total_timesteps)
         else:
             pbar = None
 
         # Get the number of state observations
-        state, info = env.reset()
-        state = torch.tensor(state.reshape(self.num_envs,self.n_observations), dtype=torch.float32, device=self.device)
+        obs, info = env.reset()
+        state = torch.tensor(obs[0].reshape(self.n_observations), dtype=torch.float32, device=self.device)
 
         num_crashes = []
-        episode_rewards = np.zeros(self.num_envs)
-        duration = np.zeros(self.num_envs)
-        episode_speed = np.zeros(self.num_envs)
+        ttc_x = []
+        ttc_y = []
+        episode_rewards = 0
+        duration = 0
+        episode_speed = 0
         ep_rew_total = np.zeros(0)
         ep_len_total = np.zeros(0)
         ep_speed_total = np.zeros(0)
@@ -345,71 +350,65 @@ class DQN_Agent(object):
         ep_num = 0
 
         while(True):
-            action = torch.squeeze(self.select_action(state, env, t_step))
-            if self.num_envs == 1:
-                action = action.view(1,1)
-            observation, reward, terminated, truncated, info = env.step(action.cpu().numpy())
+            action = self.select_action(state, env, t_step)
+            observation, reward, terminated, truncated, info = env.step((action.cpu().numpy(),))
             reward = torch.tensor(reward, dtype = torch.float32, device=self.device)
             done = terminated | truncated
 
-            if done:
-                int_frames = info['final_info'][0]['int_frames']
-            else:
-                int_frames = info['int_frames'][0]
-
-            if self.save_trajectories:
-                for worker in range(self.num_envs):
-                    if terminated[worker]:
-                        self.trajectory_store.add(worker, Transition(state[worker].cpu().numpy(), action[worker].cpu().numpy(), None, reward[worker].cpu().numpy()), int_frames)
-                    else:
-                        self.trajectory_store.add(worker, Transition(state[worker].cpu().numpy(), action[worker].cpu().numpy(), observation[worker].flatten(), reward[worker].cpu().numpy()), int_frames)
-
             state = self.update(state, action, observation, reward, terminated)
             episode_rewards = episode_rewards + reward.cpu().numpy()
-            duration = duration + np.ones(self.num_envs)
-            episode_speed = episode_speed + np.linalg.norm(state[:,3:5].cpu().numpy(), axis=1)
+            duration += 1
+            episode_speed = episode_speed + state[3].cpu().numpy()
 
-            for worker in range(self.num_envs):
-                if done[worker]:
-                    # Save Trajectories that end in a Crash
-                    if self.save_trajectories:
-                        # if info['final_info'][worker]['crashed']:
-                        #     self.trajectory_store.save(worker, ep_num)
-                        # else:
-                        #     self.trajectory_store.clear(worker)
-                        self.trajectory_store.save(worker, ep_num)
+            if done:
+                int_frames = info['int_frames']
+            else:
+                int_frames = info['int_frames']
+                ttc_x.append(info['ttc_x'])
+                ttc_y.append(info['ttc_y'])
 
 
-                    num_crashes.append(float(info['final_info'][worker]['crashed']))
-                    if self.track:
-                        ep_rew_total = np.append(ep_rew_total, episode_rewards[worker])
-                        ep_len_total = np.append(ep_len_total, duration[worker])
-                        ep_speed_total = np.append(ep_speed_total, episode_speed[worker]/duration[worker])
-                        if ep_rew_total.size > 100:
-                            ep_rew_total = np.delete(ep_rew_total, 0)
-                        if ep_len_total.size > 100:
-                            ep_len_total = np.delete(ep_len_total, 0)
-                        if ep_speed_total.size > 100:
-                            ep_speed_total = np.delete(ep_speed_total, 0)
+            if args.save_trajectories:
+                save_state = state.cpu().numpy()
+                save_action = action.cpu().numpy()
+                save_reward = reward.cpu().numpy()
+                if terminated:
+                    self.trajectory_store.add(Transition(save_state, save_action, None, save_reward), int_frames)
+                else:
+                    self.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten(), save_reward), int_frames)
 
-                        wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
-                                "rollout/ep_len_mean": ep_len_total.mean(),
-                                "rollout/num_crashes": num_crashes[-1],
-                                "rollout/num_crashes_mean": np.mean(num_crashes),
-                                "rollout/ep_speed_mean": ep_speed_total.mean()},
-                                step = ep_num)
+            if done:
 
-                    episode_rewards[worker] = 0
-                    duration[worker] = 0
-                    episode_speed[worker] = 0
-                    ep_num += 1
+                num_crashes.append(float(info['crashed']))
+                if self.track:
+                    ep_rew_total = np.append(ep_rew_total, episode_rewards)
+                    ep_len_total = np.append(ep_len_total, duration)
+                    ep_speed_total = np.append(ep_speed_total, episode_speed/duration)
+                    if ep_rew_total.size > 100:
+                        ep_rew_total = np.delete(ep_rew_total, 0)
+                    if ep_len_total.size > 100:
+                        ep_len_total = np.delete(ep_len_total, 0)
+                    if ep_speed_total.size > 100:
+                        ep_speed_total = np.delete(ep_speed_total, 0)
 
-                t_step += 1
-                pbar.update(1)
+                    wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
+                            "rollout/ep_len_mean": ep_len_total.mean(),
+                            "rollout/num_crashes": num_crashes[-1],
+                            "rollout/num_crashes_mean": np.mean(num_crashes),
+                            "rollout/ep_speed_mean": ep_speed_total.mean()},
+                            step = ep_num)
 
-                if t_step >= total_timesteps:
-                    pbar.close()
-                    return
+                episode_rewards = 0
+                duration = 0
+                episode_speed = 0
+                ep_num += 1
+
+            t_step += 1
+            pbar.update(1)
+
+            if t_step >= args.total_timesteps:
+                pbar.close()
+                return
                 
     def test(self, env, total_timesteps, use_pbar = True):
         if use_pbar:

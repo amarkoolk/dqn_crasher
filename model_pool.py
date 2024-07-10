@@ -5,10 +5,11 @@ from copy import deepcopy
 from typing import Union
 
 class ModelPool:
-    def __init__(self, sampling: str = "uniform", adjustable_k : bool = False):
+    def __init__(self, sampling: str = "uniform", adjustable_k : bool = False, version: str = "v1"):
         self.models : list[Union[DQN_Agent, str]] = []
         self.uniform_sampling = sampling == "uniform"
         self.prioritized_sampling = sampling == "prioritized"
+        self.two_model_sampling = sampling == "two_model"
         self.adjustable_k = adjustable_k
         self.rng = np.random.default_rng()
         self.model_ep_freq : list[int] = []
@@ -16,9 +17,11 @@ class ModelPool:
         self.model_crash_freq : list[int] = []
         self.model_crash_window : list[list[int]] = []
         self.model_sr100 : list[float] = []
+        self.model_speed : list[list[float]] = []
         self.model_idx : int = None
         self.size = len(self.models)
         self.cycles = {}
+        self.version = version # v1, sampling among models, v2 uniform sampling among baseline and strongest model
 
         print(f"Model Pool Initialized with {sampling} sampling")
 
@@ -86,7 +89,7 @@ class ModelPool:
     def set_opponent_elo(self, elo : float):
         self.opponent_elo = elo
 
-    def add_model(self, model : Union[DQN_Agent, str], elo : float = 1000.0, opponent_elo : float = 1000.0):
+    def add_model(self, model : Union[DQN_Agent, str], elo : float = 1000.0, opponent_elo : float = 1000.0, prepend : bool = False):
         if len(self.models) > 0:
             # Save Groups Performance
             self.cycles[self.size-1] = (self.model_ep_freq, self.model_transition_freq, self.model_crash_freq, self.model_crash_window, self.model_sr100, self.model_elo)
@@ -97,6 +100,7 @@ class ModelPool:
                 self.model_crash_freq[i] = 0
                 self.model_crash_window[i] = []
                 self.model_sr100[i] = 0
+                self.model_speed[i] = []
 
         self.models.append(deepcopy(model))
         # Update Model Probabilities
@@ -109,6 +113,7 @@ class ModelPool:
         self.model_crash_freq.append(0)
         self.model_crash_window.append([])
         self.model_sr100.append(0)
+        self.model_speed.append([])
         self.model_elo.append(elo)
         self.opponent_elo = opponent_elo
 
@@ -126,8 +131,19 @@ class ModelPool:
         elif self.prioritized_sampling:
             self.model_idx = self.rng.choice(self.size, p=self.model_probability)
             self.model_ep_freq[self.model_idx] += 1
+        elif self.two_model_sampling:
+            models = [0]
+            model_elos = np.asarray(self.model_elo)
+            strongest_model_idx = model_elos.argsort()[::-1]
+            if strongest_model_idx[0] == 0:
+                models.append(strongest_model_idx[1])
+            else:
+                models.append(strongest_model_idx[0])
+            self.model_idx = self.rng.choice(models)
+            self.model_ep_freq[self.model_idx] += 1
         else:
             raise ValueError("No sampling method selected")
+
     
     def predict(self, state):
         if len(self.models) == 0:
@@ -148,6 +164,13 @@ class ModelPool:
         if len(self.model_crash_window[self.model_idx]) > 100:
             self.model_crash_window[self.model_idx].pop(0)
         self.model_sr100[self.model_idx] = sum(self.model_crash_window[self.model_idx])/100
+
+    def update_model_speed(self, speed : float):
+        # If the window is full, pop the first element
+        if len(self.model_speed[self.model_idx]) >= 100:
+            self.model_speed[self.model_idx].pop(0)
+            
+        self.model_speed[self.model_idx].append(speed)
 
     def set_K_factor(self, config : str):
         if 'forward' in config:
@@ -176,8 +199,6 @@ class ModelPool:
         cum_sum = 0
         for i in range(self.size):
             self.model_probability[i] = 1 / (1 + np.exp(-(self.model_elo[i] - self.opponent_elo) / self.s_factor))
-            if ego:
-                self.model_probability[i] = 1 - self.model_probability[i]
             cum_sum += self.model_probability[i]
         for i in range(self.size):
             self.model_probability[i] /= cum_sum

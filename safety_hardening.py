@@ -71,12 +71,17 @@ if __name__ == "__main__":
 
     # Multi-Agent Environment Config
     ma_config = load_config("env_configs/multi_agent.yaml")
+    ma_config['use_mobil'] = True
+    ma_config['ego_vs_mobil'] = True
+    ma_config['adversarial'] = False
+    ma_config['normalize_reward'] = True
+    ma_config['collision_reward'] = -1
 
     # Create Vector Env with Non-Adversarial Rewards
-    na_env = make_vector_env(na_env_cfg, num_envs = args.num_envs, record_video=False, record_dir='na_videos', record_every=100)
+    env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
 
-    # # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
-    ego_agent = DQN_Agent(na_env, args, device, save_trajectories=args.save_trajectories, multi_agent=False, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
+    # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
+    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
 
     # # Load Ego Model
     if args.load_model:
@@ -84,8 +89,8 @@ if __name__ == "__main__":
 
     # # Learn Ego Model Initially
     if args.learn:
-        ego_agent.learn(na_env, args.total_timesteps)
-    na_env.close()
+        ego_agent.learn(env, args)
+    env.close()
 
     # # Save Non-Adversarial Collision Trajectories
     if args.save_trajectories:
@@ -97,24 +102,20 @@ if __name__ == "__main__":
 
     # 2. Test Ego Vehicle in Non-Adversarial Environment
     
-    ego_model0 = "E0_MOBIL.pth"
-    ego_models = [f"E{i}_V{i}_TrainEgo_True.pth" for i in range(1,6)]
-    ego_models = [ego_model0] + ego_models
+    ego_model = "models/bl_eps_start_1.0/E1_V0_TrainEgo_True.pth"
     na_env = gym.make('crash-v0', config=na_env_cfg, render_mode='rgb_array')
     na_env.configure({'adversarial' : False})
-    args.num_envs = 1
-    for ego_version in range(0,6):
-        ego_agent = DQN_Agent(na_env, args, device, adversarial = False, save_trajectories=args.save_trajectories)
-        ego_agent.load_model(path = ego_models[ego_version])
-        while True:
-            done = truncated = False
-            obs, info = na_env.reset()
+    ego_agent = DQN_Agent(na_env, args, device)
+    ego_agent.load_model(path = ego_model)
+    while True:
+        done = truncated = False
+        obs, info = na_env.reset()
+        ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
+        while not (done or truncated):
+            with torch.no_grad():
+                ego_action = torch.argmax(ego_agent.policy_net(ego_state))
+            obs, reward, done, truncated, info = na_env.step(ego_action)
             ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
-            while not (done or truncated):
-                with torch.no_grad():
-                    ego_action = torch.argmax(ego_agent.policy_net(ego_state))
-                obs, reward, done, truncated, info = na_env.step(ego_action)
-                ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
 
     na_env.close()
 

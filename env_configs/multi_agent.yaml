@@ -39,13 +39,13 @@ policy_frequency: 1
 vehicles_count: 0
 spawn_configs:
 - behind_left
-- behind_right
-- behind_center
-- adjacent_left
-- adjacent_right
+# - behind_right
+# - behind_center
+# - adjacent_left
+# - adjacent_right
 - forward_left
-- forward_right
-- forward_center
+# - forward_right
+# - forward_center
 tolerance: 0.001
 collision_reward: 400
 ttc_x_reward: 4
@@ -58,3 +58,4 @@ use_mobil: False
 right_lane_reward: 0.1
 high_speed_reward: 0.4
 lane_change_reward: 0
+reward_speed_range: [20, 20.5]

@@ -30,6 +30,8 @@ class Args:
     """whether to save model into the `runs/{run_name}` folder"""
     load_model: bool = False
     """whether to load model from the `runs/{run_name}` folder"""
+    model_folder: str = "models"
+    """the folder to save/load models"""
     save_trajectories: bool = False
     """whether to save trajectories"""
     trajectories_folder: str = "trajectories"
