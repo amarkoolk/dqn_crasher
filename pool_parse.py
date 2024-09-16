@@ -46,9 +46,9 @@ def parse_pool(npc_file, ego_file):
     return npc_elo_arr, ego_elo_arr, npc_elo_agent_freq, ego_elo_agent_freq
 
 
-npc_files = ['npc_pool_bl_1.0.json','npc_pool_bl_0.25.json']
-ego_files = ['ego_pool_bl_1.0.json','ego_pool_bl_0.25.json']
-eps = [1.0, 0.25]
+npc_files = ['npc_pool_adj_all_1_two_model.json']
+ego_files = ['ego_pool_adj_all_1_two_model.json']
+eps = [1.0]
 npc_elo_arr = []
 ego_elo_arr = []
 npc_elo_agent_freq = []
@@ -85,7 +85,7 @@ for i in range(len(npc_files)):
 
 
 for i in range(len(eps)):
-    for v in range(4):
+    for v in range(2):
         if(v == 0):
             plt.plot(npc_elo_arr[i][:,v], label=f'NPC - MOBIL', linestyle='solid')
             plt.plot(ego_elo_arr[i][:,v], label=f'Ego_{v} - MOBIL', linestyle='solid')
@@ -96,7 +96,7 @@ for i in range(len(eps)):
         plt.vlines(x=npc_elo_agent_freq[i][:], ymin=0, ymax=2000, color='b', linestyle='--')
     
 
-    plt.plot(npc_elo_arr[i][:,4], label=f'NPC_{4-1}', linestyle='solid')
+    plt.plot(npc_elo_arr[i][:,2], label=f'NPC_{4-1}', linestyle='solid')
 
     plt.legend()
     plt.grid()

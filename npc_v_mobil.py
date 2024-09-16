@@ -39,7 +39,8 @@ if __name__ == "__main__":
         device = torch.device("cpu")
 
     args.num_envs = min(args.num_envs, os.cpu_count())
-    env_config = load_config("env_configs/single_agent_crash.yaml")
+    env_config = load_config("env_configs/multi_agent.yaml")
+    env_config['use_mobil'] = True
     if args.eval:
         if args.track:
             if wandb.run is not None:
@@ -61,7 +62,7 @@ if __name__ == "__main__":
                 initialize_logging(args, ego_version = "NPC_v_MOBIL", npc_version = "NPC_v_MOBIL", train_ego = False, eval = False, npc_pool_size = None, ego_pool_size = None, sampling = None)
 
         env = make_vector_env(env_config, args.num_envs, record_video=False, record_dir='', record_every=100)
-        npc_agent : DQN_Agent = DQN_Agent(env, args, device, ego_or_npc="NPC")
-        npc_agent.learn(env, args.total_timesteps)
+        npc_agent : DQN_Agent = DQN_Agent(env, args, device, ego_or_npc="NPC", multi_agent=True, override_obs=10)
+        npc_agent.learn(env, args)
         npc_agent.save_model("NPC_v_MOBIL.pth")
         env.close()

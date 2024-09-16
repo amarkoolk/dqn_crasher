@@ -310,6 +310,7 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
     episode_rewards = 0
     duration = 0
     episode_speed = 0
+    npc_speed = 0
     ep_rew_total = np.zeros(0)
     ep_len_total = np.zeros(0)
     ep_speed_total = np.zeros(0)
@@ -330,11 +331,16 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
     env.configure(config)
     obs, info = env.reset()
 
-    if(npc_mobil):
-        ego_state = torch.tensor(obs[0].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
-    else:
-        ego_state = torch.tensor(obs[0].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
-        npc_state = torch.tensor(obs[1].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
+    flattened_ego_obs = obs[0].flatten()
+    ego_obs = flattened_ego_obs[:ego_agent.n_observations]
+    ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
+    ego_state[0,ego_agent.n_observations-1] = float(not npc_mobil)
+    if not npc_mobil:
+        flattened_npc_obs = obs[1].flatten()
+        npc_obs = flattened_npc_obs[:npc_pool.n_observations]
+        npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
+
+        
     
     # Testing Loop
     while t_step < args.total_timesteps:
@@ -352,10 +358,7 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
         done = terminated | truncated
 
-        if done:
-            int_frames = info['int_frames']
-        else:
-            int_frames = info['int_frames']
+        int_frames = info['int_frames']
 
         if args.save_trajectories:
             save_state = ego_state.cpu().numpy()
@@ -366,14 +369,23 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
             else:
                 ego_agent.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten(), save_reward), int_frames)
 
-        next_state = torch.tensor(obs[0].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
+        flattened_ego_obs = obs[0].flatten()
+        ego_obs = flattened_ego_obs[:ego_agent.n_observations]
+        next_state = torch.tensor(ego_obs.reshape(1,len(ego_obs)), dtype=torch.float32, device=device)
+        next_state[0,ego_agent.n_observations-1] = float(not npc_mobil)
         ego_state = ego_agent.update(ego_state, ego_action, next_state, reward, terminated)
         if not npc_mobil:
-            npc_state = torch.tensor(obs[1].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
+            flattened_npc_obs = obs[1].flatten()
+            npc_obs = flattened_npc_obs[:npc_pool.n_observations]
+            npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
 
         episode_rewards = episode_rewards + reward.cpu().numpy()
         duration += 1
         episode_speed += ego_state[0,3].cpu().numpy()
+        if not npc_mobil:
+            npc_speed += npc_state[0,3].cpu().numpy()
+        else:
+            npc_speed += ego_state[0,3].cpu().numpy() + ego_state[0,8].cpu().numpy()
 
 
         if done:
@@ -394,6 +406,7 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
                     ep_speed_total = np.delete(ep_speed_total, 0)
 
                 npc_pool.update_model_crashes(int(info['crashed']))
+                npc_pool.update_model_speed(ego_state[0,3].cpu().numpy())
                 # npc_pool.update_model_elo(1-int(info['final_info'][worker]['crashed']),int(info['final_info'][worker]['crashed']), info['final_info'][worker]['spawn_config'])
                 # npc_pool.update_probabilities(False)
 
@@ -401,9 +414,11 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
                         "rollout/ep_len_mean": ep_len_total.mean(),
                         "rollout/num_crashes": num_crashes[-1],
                         "rollout/sr100": np.mean(num_crashes[-100:]),
-                        "rollout/ego_speed_mean": ep_speed_total.mean(),
+                        "rollout/ego_speed_mean": episode_speed/duration,
+                        "rollout/npc_speed_mean": npc_speed/duration,
                         "rollout/opponent_elo": npc_pool.opponent_elo,
-                        "rollout/spawn_config": info['spawn_config']},
+                        "rollout/spawn_config": info['spawn_config'],
+                        "rollout/use_mobil": npc_mobil},
                         step = ep_num)
 
                 for idx, model in enumerate(npc_pool.models):
@@ -418,6 +433,7 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
             episode_rewards = 0
             duration = 0
             episode_speed = 0
+            npc_speed = 0
             ep_num += 1
             # Update Model Choice
             npc_pool.choose_model()
@@ -432,11 +448,14 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
             env.configure(config)
             obs, info = env.reset()
 
-            if(npc_mobil):
-                ego_state = torch.tensor(obs[0].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
-            else:
-                ego_state = torch.tensor(obs[0].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
-                npc_state = torch.tensor(obs[1].reshape(1,ego_agent.n_observations), dtype=torch.float32, device=device)
+            flattened_ego_obs = obs[0].flatten()
+            ego_obs = flattened_ego_obs[:ego_agent.n_observations]
+            ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
+            ego_state[0,ego_agent.n_observations-1] = float(not npc_mobil)
+            if not npc_mobil:
+                flattened_npc_obs = obs[1].flatten()
+                npc_obs = flattened_npc_obs[:npc_pool.n_observations]
+                npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
             
 
         t_step += 1
@@ -475,10 +494,8 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
 
     
     num_crashes = []
-    ttc_x = []
-    ttc_y = []
-    ego_speed = []
-    npc_speed = []
+    ego_speed = 0
+    npc_speed = 0
     episode_rewards = 0
     duration = 0
     ep_rew_total = 0
@@ -503,14 +520,20 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
     env.configure(config)
     obs, info = env.reset()
 
-    if(ego_mobil):
-        npc_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+    if ego_mobil:
+        flattened_npc_obs = obs[0].flatten()
+        npc_obs = flattened_npc_obs[:npc_agent.n_observations]
+        npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
     else:
-        ego_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
-        npc_state = torch.tensor(obs[1].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+        flattened_ego_obs = obs[0].flatten()
+        ego_obs = flattened_ego_obs[:ego_pool.n_observations]
+        ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)    
+        ego_state[0,ego_pool.n_observations-1] = 1.0
+
+        flattened_npc_obs = obs[1].flatten()
+        npc_obs = flattened_npc_obs[:npc_agent.n_observations]
+        npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
     
-    if(ego_mobil == False):
-        print(ego_state)
     # Testing Loop
     while t_step < args.total_timesteps:
         
@@ -529,13 +552,7 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
         done = terminated | truncated
 
 
-        if done:
-            int_frames = info['int_frames']
-        else:
-            int_frames = info['int_frames']
-            ttc_x.append(info['ttc_x'])
-            ttc_y.append(info['ttc_y'])
-
+        int_frames = info['int_frames']
 
         if args.save_trajectories:
             if ego_mobil:
@@ -550,19 +567,30 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
             else:
                 npc_agent.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten(), save_reward), int_frames)
 
-        if(ego_mobil):
-            npc_state = npc_agent.update(npc_state, npc_action, obs[0], reward, terminated)
+        if ego_mobil:
+            flattened_npc_obs = obs[0].flatten()
+            npc_obs = flattened_npc_obs[:npc_agent.n_observations]
+            next_state = torch.tensor(npc_obs.reshape(1,len(npc_obs)), dtype=torch.float32, device=device)
         else:
-            ego_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
-            npc_state = npc_agent.update(npc_state, npc_action, obs[1], reward, terminated)
+            flattened_ego_obs = obs[0].flatten()
+            ego_obs = flattened_ego_obs[:ego_pool.n_observations]
+            ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)    
+            ego_state[0,ego_pool.n_observations-1] = 1.0
+
+            flattened_npc_obs = obs[1].flatten()
+            npc_obs = flattened_npc_obs[:npc_agent.n_observations]
+            next_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
+
+        npc_state = npc_agent.update(npc_state, npc_action, next_state, reward, terminated)
 
         episode_rewards = episode_rewards + reward.cpu().numpy()
         duration = duration + np.ones(args.num_envs)
         if(ego_mobil):
-            npc_speed.append(npc_state[3].cpu().numpy())
+            npc_speed += npc_state[0,3].cpu().numpy()
+            ego_speed += npc_state[0,3].cpu().numpy() + npc_state[0,8].cpu().numpy()
         else:
-            ego_speed.append(ego_state[3].cpu().numpy())
-            npc_speed.append(npc_state[3].cpu().numpy())
+            ego_speed += ego_state[0,3].cpu().numpy()
+            npc_speed += npc_state[0,3].cpu().numpy()
 
         if done:
             # Save Trajectories that end in a Crash
@@ -575,6 +603,7 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
                 ep_len_total = np.append(ep_len_total, duration)
 
                 ego_pool.update_model_crashes(int(info['crashed']))
+                ego_pool.update_model_speed(npc_state[0,3].cpu().numpy())
                 # ego_pool.update_model_elo(int(info['final_info'][worker]['crashed']),1-int(info['final_info'][worker]['crashed']), info['final_info'][worker]['spawn_config'])
                 # ego_pool.update_probabilities(True)
 
@@ -582,12 +611,11 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
                         "rollout/ep_len_mean": ep_len_total.mean(),
                         "rollout/num_crashes": num_crashes[-1],
                         "rollout/sr100": np.mean(num_crashes[-100:]),
-                        "rollout/ego_speed_mean": np.mean(ego_speed),
-                        "rollout/npc_speed_mean": np.mean(npc_speed),
+                        "rollout/ego_speed_mean": ego_speed/duration,
+                        "rollout/npc_speed_mean": npc_speed/duration,
                         "rollout/opponent_elo": ego_pool.opponent_elo,
-                        "rollout/ttc_x": np.mean(ttc_x),
-                        "rollout/ttc_y": np.mean(ttc_y),
-                        "rollout/spawn_config": info['spawn_config']},
+                        "rollout/spawn_config": info['spawn_config'],
+                        "rollout/use_mobil": ego_mobil},
                         step = ep_num)
 
                 for idx, model in enumerate(ego_pool.models):
@@ -598,9 +626,9 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
                                 f"rollout/model_{idx}_elo": ego_pool.model_elo[idx]},
                                 step = ep_num)
                 
-            ttc_x = []
-            ttc_y = []
             episode_rewards = 0
+            ego_speed = 0
+            npc_speed = 0
             duration = 0
             ep_num += 1
             # Update Model Choice
@@ -616,11 +644,19 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
             env.configure(config)
             obs, info = env.reset()
 
-            if(ego_mobil):
-                npc_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+            if ego_mobil:
+                flattened_npc_obs = obs[0].flatten()
+                npc_obs = flattened_npc_obs[:npc_agent.n_observations]
+                npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
             else:
-                ego_state = torch.tensor(obs[0].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
-                npc_state = torch.tensor(obs[1].reshape(npc_agent.n_observations), dtype=torch.float32, device=device)
+                flattened_ego_obs = obs[0].flatten()
+                ego_obs = flattened_ego_obs[:ego_pool.n_observations]
+                ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)    
+                ego_state[0,ego_pool.n_observations-1] = 1.0
+
+                flattened_npc_obs = obs[1].flatten()
+                npc_obs = flattened_npc_obs[:npc_agent.n_observations]
+                npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
 
         t_step += 1
         pbar.update(1)
@@ -683,12 +719,23 @@ def pool_evaluation(env, cycle, ego_pool : ModelPool, npc_pool : ModelPool, args
 
 
         if(ego_mobil):
-            npc_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+            flattened_npc_obs = obs[0].flatten()
+            npc_obs = flattened_npc_obs[:npc_pool.n_observations]
+            npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
         elif(npc_mobil):
-            ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+            flattened_ego_obs = obs[0].flatten()
+            ego_obs = flattened_ego_obs[:ego_pool.n_observations]
+            ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
+            ego_state[0,ego_pool.n_observations-1] = float(not npc_mobil)
         else:
-            ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
-            npc_state = torch.tensor(obs[1].reshape(n_obs), dtype=torch.float32, device=device)
+            flattened_ego_obs = obs[0].flatten()
+            ego_obs = flattened_ego_obs[:ego_pool.n_observations]
+            ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)    
+            ego_state[0,ego_pool.n_observations-1] = 1.0
+
+            flattened_npc_obs = obs[1].flatten()
+            npc_obs = flattened_npc_obs[:npc_pool.n_observations]
+            npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
 
         while not done:
             if(ego_mobil):
@@ -709,12 +756,23 @@ def pool_evaluation(env, cycle, ego_pool : ModelPool, npc_pool : ModelPool, args
             done = terminated | truncated
 
             if(ego_mobil):
-                npc_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+                flattened_npc_obs = obs[0].flatten()
+                npc_obs = flattened_npc_obs[:npc_pool.n_observations]
+                npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
             elif(npc_mobil):
-                ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
+                flattened_ego_obs = obs[0].flatten()
+                ego_obs = flattened_ego_obs[:ego_pool.n_observations]
+                ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
+                ego_state[0,ego_pool.n_observations-1] = float(not npc_mobil)
             else:
-                ego_state = torch.tensor(obs[0].reshape(n_obs), dtype=torch.float32, device=device)
-                npc_state = torch.tensor(obs[1].reshape(n_obs), dtype=torch.float32, device=device)
+                flattened_ego_obs = obs[0].flatten()
+                ego_obs = flattened_ego_obs[:ego_pool.n_observations]
+                ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)    
+                ego_state[0,ego_pool.n_observations-1] = 1.0
+
+                flattened_npc_obs = obs[1].flatten()
+                npc_obs = flattened_npc_obs[:npc_pool.n_observations]
+                npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
 
             if done:
                 crash = int(info['crashed'])
@@ -942,7 +1000,7 @@ def test_ego_additional_state(env, ego_agent : DQN_Agent, npc_pool : ModelPool, 
 
 
         if done:
-            # Save Trajectories that end in a Crash
+            # Save Trajectories
             if args.save_trajectories:    
                 ego_agent.trajectory_store.clear()
 

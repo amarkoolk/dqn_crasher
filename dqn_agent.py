@@ -189,11 +189,11 @@ class DQN_Agent(object):
         self.cycle = cycle
         
         if self.multi_agent:
-            self.n_actions = env.action_space[0].n
+            self.n_actions = 5
             state, _ = env.reset()
             self.n_observations = len(state[0].flatten())
         else:
-            self.n_actions = env.action_space.n
+            self.n_actions = 5
             state, _ = env.reset()
             self.n_observations = len(state[0].flatten())
 
@@ -334,11 +334,11 @@ class DQN_Agent(object):
 
         # Get the number of state observations
         obs, info = env.reset()
-        state = torch.tensor(obs[0].reshape(self.n_observations), dtype=torch.float32, device=self.device)
+        
+        flattened_obs = obs[0].flatten()
+        state = torch.tensor(flattened_obs[:self.n_observations].reshape(1, len(flattened_obs[:self.n_observations])), dtype=torch.float32, device=self.device)
 
         num_crashes = []
-        ttc_x = []
-        ttc_y = []
         episode_rewards = 0
         duration = 0
         episode_speed = 0
@@ -351,21 +351,24 @@ class DQN_Agent(object):
 
         while(True):
             action = self.select_action(state, env, t_step)
-            observation, reward, terminated, truncated, info = env.step((action.cpu().numpy(),))
+            obs, reward, terminated, truncated, info = env.step(([action.cpu().numpy()],))
             reward = torch.tensor(reward, dtype = torch.float32, device=self.device)
             done = terminated | truncated
 
-            state = self.update(state, action, observation, reward, terminated)
+
+            flattened_obs = obs[0].flatten()
+            next_state = torch.tensor(flattened_obs[:self.n_observations].reshape(1,len(flattened_obs[:self.n_observations])), dtype=torch.float32, device=self.device)
+            state = self.update(state, action, next_state, reward, terminated)
+
             episode_rewards = episode_rewards + reward.cpu().numpy()
             duration += 1
-            episode_speed = episode_speed + state[3].cpu().numpy()
+            episode_speed = episode_speed + state[0,3].cpu().numpy()
+
 
             if done:
-                int_frames = info['int_frames']
+                int_frames = None
             else:
                 int_frames = info['int_frames']
-                ttc_x.append(info['ttc_x'])
-                ttc_y.append(info['ttc_y'])
 
 
             if args.save_trajectories:
@@ -378,8 +381,9 @@ class DQN_Agent(object):
                     self.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten(), save_reward), int_frames)
 
             if done:
+                
+                num_crashes.append(float(info['final_info'][0]['crashed']))
 
-                num_crashes.append(float(info['crashed']))
                 if self.track:
                     ep_rew_total = np.append(ep_rew_total, episode_rewards)
                     ep_len_total = np.append(ep_len_total, duration)
@@ -391,12 +395,13 @@ class DQN_Agent(object):
                     if ep_speed_total.size > 100:
                         ep_speed_total = np.delete(ep_speed_total, 0)
 
-                    wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
-                            "rollout/ep_len_mean": ep_len_total.mean(),
-                            "rollout/num_crashes": num_crashes[-1],
-                            "rollout/num_crashes_mean": np.mean(num_crashes),
-                            "rollout/ep_speed_mean": ep_speed_total.mean()},
-                            step = ep_num)
+                    wandb.log({"rollout/ep_rew_mean": np.mean(episode_rewards),
+                        "rollout/ep_len_mean": ep_len_total.mean(),
+                        "rollout/num_crashes": np.sum(num_crashes),
+                        "rollout/sr100": np.mean(num_crashes[-100:]),
+                        "rollout/ego_speed_mean": np.mean(ep_speed_total),
+                        "rollout/spawn_config": info['spawn_config']},
+                        step = ep_num)
 
                 episode_rewards = 0
                 duration = 0
@@ -432,7 +437,7 @@ class DQN_Agent(object):
         ep_num = 0
 
         while(True):
-            action = torch.squeeze(self.predict(state))
+            action = self.predict(state)
             observation, reward, terminated, truncated, info = env.step(action.cpu().numpy())
             reward = torch.tensor(reward, dtype = torch.float32, device=self.device)
             done = terminated | truncated

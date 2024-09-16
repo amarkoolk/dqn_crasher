@@ -5,8 +5,9 @@ from copy import deepcopy
 from typing import Union
 
 class ModelPool:
-    def __init__(self, sampling: str = "uniform", adjustable_k : bool = False, version: str = "v1"):
+    def __init__(self, sampling: str = "uniform", adjustable_k : bool = False, version: str = "v1", n_obs: int = 10):
         self.models : list[Union[DQN_Agent, str]] = []
+        self.n_observations = n_obs
         self.uniform_sampling = sampling == "uniform"
         self.prioritized_sampling = sampling == "prioritized"
         self.two_model_sampling = sampling == "two_model"

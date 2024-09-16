@@ -75,8 +75,8 @@ if __name__ == "__main__":
         ego_version = 0
         npc_version = 0
 
-        ego_pool = ModelPool(args.sampling, args.adjustable_k)
-        npc_pool = ModelPool(args.sampling, args.adjustable_k)
+        ego_pool = ModelPool(args.sampling, args.adjustable_k, n_obs=11)
+        npc_pool = ModelPool(args.sampling, args.adjustable_k, n_obs=10)
         ego_elo = 1000
         npc_elo = 1000
 
@@ -84,10 +84,6 @@ if __name__ == "__main__":
         ego_pool.add_model(baseline_model, 1000.0, 1000.0)
         if args.sampling == "two_model":
             npc_pool.add_model(baseline_model, 1000.0, 1000.0)
-
-        
-        
-
 
 
         for cycle in range(cycles):
@@ -100,10 +96,10 @@ if __name__ == "__main__":
             train_ego = True
             ego_version +=1
             trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_True'
-            ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO')
+            ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO', override_obs=11)
             ego_agent.load_model(path = ego_model)
             trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_False'
-            npc_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='NPC')
+            npc_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='NPC', override_obs=10)
             npc_agent.load_model(path = npc_model)
             npc_agent.cycle = cycle
 
