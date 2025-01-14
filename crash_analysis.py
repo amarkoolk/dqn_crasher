@@ -17,7 +17,7 @@ class Action(Enum):
   FASTER = 3
   SLOWER = 4
 
-trajectory_path = 'fixed_npc_behind_left/E0_V1_TrainEgo_False/NPC'
+trajectory_path = 'local_falsification_hardening_traj_all_5/E1_V1_TrainEgo_False/NPC'
 file_name = '0.json'
 framerate = 15
 

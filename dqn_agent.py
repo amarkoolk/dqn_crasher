@@ -185,6 +185,7 @@ class DQN_Agent(object):
         self.device = device
         self.track = args.track
         self.multi_agent = multi_agent
+        self.eps_threshold = 1.0
 
         self.cycle = cycle
         
@@ -220,9 +221,9 @@ class DQN_Agent(object):
     def select_action(self, state, env, steps_done):
 
         sample = random.random()
-        eps_threshold = self.end_e + (self.start_e - self.end_e) * \
+        self.eps_threshold = self.end_e + (self.start_e - self.end_e) * \
             math.exp(-1. * steps_done / self.decay_e)
-        if sample > eps_threshold:
+        if sample > self.eps_threshold:
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.

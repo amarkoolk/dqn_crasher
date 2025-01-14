@@ -48,6 +48,8 @@ class Args:
     """whether to use adjustable k factor for ELO"""
     evaluation_episodes: int = 100
     """the number of episodes for evaluation"""
+    wandb_tag: str = None
+    """the tag for wandb"""
 
     # Environment specific arguments
     max_duration: int = 100

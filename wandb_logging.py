@@ -44,6 +44,11 @@ def initialize_logging(args, ego_version = None, npc_version = None, train_ego =
 
     if sampling is not None:
         run_config['model_sampling'] = sampling
+
+    if args.wandb_tag is not None:
+        tags = args.wandb_tag.split(',')
+    else:
+        tags = []
     
         
     run = wandb.init(
@@ -51,7 +56,9 @@ def initialize_logging(args, ego_version = None, npc_version = None, train_ego =
             project=args.wandb_project_name,
             
             # track hyperparameters and run metadata
-            config=run_config
+            config=run_config,
+
+            tags=tags
         )
     return run
 

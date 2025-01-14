@@ -16,11 +16,13 @@ for ind in df.index:
     summary_entry_dict = None
     config_entry_dict = None
     attr_entry_dict = None
+    tag_entry_dict = None
     summary_entry = df['summary'][ind]
     if isinstance(summary_entry, str):
         summary_entry = summary_entry.replace("'", "\"")
+        summary_entry = summary_entry.replace("True", "true")
+        summary_entry = summary_entry.replace("False", "false")
         summary_entry_dict = json.loads(summary_entry)
-    
     config_entry = df['config'][ind]
     if isinstance(config_entry, str):
         config_entry = config_entry.replace("'", "\"")
@@ -28,24 +30,26 @@ for ind in df.index:
         config_entry = config_entry.replace("False", "false")
         config_entry_dict = json.loads(config_entry)
 
-    attr_entry = df['attrs'][ind]
+    tag_entry_list = df['tags'][ind]
+    
+    name = df['name'][ind]
     # Safely evaluate the string to a Python object if it's not already one
-    if isinstance(attr_entry, str):
-        # Attempt to directly parse as JSON first
-        try:
-            attr_entry_dict = json.loads(attr_entry)
-        except json.JSONDecodeError:
-            # If direct JSON parsing fails, try fixing Python-specific notations
-            try:
-                # Use ast.literal_eval for safe evaluation of Python literals
-                attr_entry_python = ast.literal_eval(attr_entry)
-                # Convert back to a string using json.dumps to ensure JSON compatibility
-                attr_entry = json.dumps(attr_entry_python)
-                attr_entry_dict = json.loads(attr_entry)
-            except (ValueError, SyntaxError):
-                print("Error evaluating or converting the attribute entry.")
-    else:
-        attr_entry_dict = attr_entry  # If it's already a dict, no need to parse
+    # if isinstance(attr_entry, str):
+    #     # Attempt to directly parse as JSON first
+    #     try:
+    #         attr_entry_dict = json.loads(attr_entry)
+    #     except json.JSONDecodeError:
+    #         # If direct JSON parsing fails, try fixing Python-specific notations
+    #         try:
+    #             # Use ast.literal_eval for safe evaluation of Python literals
+    #             attr_entry_python = ast.literal_eval(attr_entry)
+    #             # Convert back to a string using json.dumps to ensure JSON compatibility
+    #             attr_entry = json.dumps(attr_entry_python)
+    #             attr_entry_dict = json.loads(attr_entry)
+    #         except (ValueError, SyntaxError):
+    #             print("Error evaluating or converting the attribute entry.")
+    # else:
+    #     attr_entry_dict = attr_entry  # If it's already a dict, no need to parse
 
 
     if isinstance(summary_entry_dict, dict) and isinstance(config_entry_dict, dict):
@@ -63,7 +67,7 @@ for ind in df.index:
             #             max_ego_version = ego_v
             #         if npc_v > max_npc_version:
             #             max_npc_version = npc_v
-            if config_entry_dict['eval'] and config_entry_dict['max_steps']==10000 and config_entry_dict['model_sampling'] == 'prioritized' and ('forward_only' in attr_entry_dict['tags']):
+            if config_entry_dict['eval'] and ('prio_all_5_cycle_eval' in tag_entry_list):
                 timestamps.append(summary_entry_dict['_timestamp'])
                 ego_v = config_entry_dict['ego_version']
                 npc_v = config_entry_dict['npc_version']
@@ -75,7 +79,7 @@ for ind in df.index:
                 if npc_v > max_npc_version:
                     max_npc_version = npc_v
 
-            if config_entry_dict['eval'] and config_entry_dict['model_sampling'] == 'uniform' and ('pfsp-fixedelo' in attr_entry_dict['tags']):
+            if config_entry_dict['eval'] and config_entry_dict['model_sampling'] == 'uniform' and ('uniform_all_5_cycle_eval' in tag_entry_list):
                 timestamps.append(summary_entry_dict['_timestamp'])
                 ego_v = config_entry_dict['ego_version']
                 npc_v = config_entry_dict['npc_version']
@@ -87,7 +91,7 @@ for ind in df.index:
                 if npc_v > max_npc_version:
                     max_npc_version = npc_v
 
-            if config_entry_dict['eval'] and config_entry_dict['model_sampling'] == 'sequential' and ('pfsp-fixedelo' in attr_entry_dict['tags']):
+            if config_entry_dict['eval']  and ('local_all_5_cycle_eval' in tag_entry_list):
                 timestamps.append(summary_entry_dict['_timestamp'])
                 ego_v = config_entry_dict['ego_version']
                 npc_v = config_entry_dict['npc_version']

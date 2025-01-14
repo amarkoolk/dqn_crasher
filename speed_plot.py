@@ -23,10 +23,29 @@ if __name__ == "__main__":
     ax.set_title("Ego Speed")
     ax.set_xlabel("Episode")
     ax.set_ylabel("Average Speed (m/s)")
+    all_histories = []
+
     for tag, history in run_history:
-        if(len(tag) != 3):
+        if len(tag) != 3:
             continue
         history["smoothed_speed"] = history["rollout/ego_speed_mean"].ewm(span=500).mean()
-        history.plot(x="_step",y="smoothed_speed", grid=True, ax=ax, label=f"{tag[1]}, {tag[2]}")
+        all_histories.append(history[["_step", "smoothed_speed"]])
 
+    # Concatenate all histories into a single DataFrame
+    combined_history = pd.concat(all_histories)
+
+    # Group by step and calculate mean and standard deviation
+    grouped_history = combined_history.groupby("_step").agg(
+        mean_speed=("smoothed_speed", "mean"),
+        std_speed=("smoothed_speed", "std")
+    ).reset_index()
+
+    # Plot the mean speed with standard deviation as a shaded area
+    ax.plot(grouped_history["_step"], grouped_history["mean_speed"], label="Average Speed")
+    ax.fill_between(grouped_history["_step"], 
+                    grouped_history["mean_speed"] - grouped_history["std_speed"], 
+                    grouped_history["mean_speed"] + grouped_history["std_speed"], 
+                    color='b', alpha=0.2, label="Standard Deviation")
+    ax.legend()
+    ax.grid()
     plt.show()

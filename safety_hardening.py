@@ -100,24 +100,26 @@ if __name__ == "__main__":
     if args.save_model:
         ego_agent.save_model(path = 'ego_model.pth')
 
+
+
     # 2. Test Ego Vehicle in Non-Adversarial Environment
     
-    ego_model = "models/bl_eps_start_1.0/E1_V0_TrainEgo_True.pth"
-    na_env = gym.make('crash-v0', config=na_env_cfg, render_mode='rgb_array')
-    na_env.configure({'adversarial' : False})
-    ego_agent = DQN_Agent(na_env, args, device)
-    ego_agent.load_model(path = ego_model)
-    while True:
-        done = truncated = False
-        obs, info = na_env.reset()
-        ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
-        while not (done or truncated):
-            with torch.no_grad():
-                ego_action = torch.argmax(ego_agent.policy_net(ego_state))
-            obs, reward, done, truncated, info = na_env.step(ego_action)
-            ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
+    # ego_model = "models/bl_eps_start_1.0/E1_V0_TrainEgo_True.pth"
+    # na_env = gym.make('crash-v0', config=na_env_cfg, render_mode='rgb_array')
+    # na_env.configure({'adversarial' : False})
+    # ego_agent = DQN_Agent(na_env, args, device)
+    # ego_agent.load_model(path = ego_model)
+    # while True:
+    #     done = truncated = False
+    #     obs, info = na_env.reset()
+    #     ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
+    #     while not (done or truncated):
+    #         with torch.no_grad():
+    #             ego_action = torch.argmax(ego_agent.policy_net(ego_state))
+    #         obs, reward, done, truncated, info = na_env.step(ego_action)
+    #         ego_state = torch.tensor(obs.flatten(), dtype=torch.float32, device=device)
 
-    na_env.close()
+    # na_env.close()
 
     # 3. Test Ego Vehicle in Adversarial Environment/ Train Adversarial Agent
     # env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')

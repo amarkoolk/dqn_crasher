@@ -53,15 +53,15 @@ if __name__ == "__main__":
     npc_version = 0
 
 
-    ma_config['adversarial'] = False
-    ma_config['normalize_reward'] = True
-    ma_config['collision_reward'] = -1
+    # ma_config['adversarial'] = False
+    # ma_config['normalize_reward'] = True
+    # ma_config['collision_reward'] = -1
     env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
     trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_False'
-    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO', override_obs=10)
+    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='NPC', override_obs=10)
 
     # Random UUID
     run_id = wandb.util.generate_id()
-    train_ego(env, ego_agent, args, device, model_path=f'ego_models/baseline_20_30_2/train_ego.pth')
+    train_ego(env, ego_agent, args, device, model_path=f'npc_models/npc_1_1_1/train_npc.pth')
 
     env.close()
