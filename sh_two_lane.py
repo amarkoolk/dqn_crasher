@@ -24,6 +24,8 @@ from multi_agent_pool import multi_agent_loop
 from wandb_logging import initialize_logging
 from config import load_config
 from create_env import make_env, make_vector_env
+import highway_env
+
 
 import tyro
 from arguments import Args
@@ -158,6 +160,7 @@ if __name__ == "__main__":
             ma_config['adversarial'] = True
             ma_config['normalize_reward'] = False
             ma_config['collision_reward'] = 400
+
             env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
             trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_True'
             ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO', override_obs=10)

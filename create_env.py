@@ -1,5 +1,5 @@
 import gymnasium as gym
-from gymnasium.wrappers.record_video import RecordVideo
+from gymnasium.wrappers.rendering import RecordVideo
 from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
 
 

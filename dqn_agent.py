@@ -39,12 +39,18 @@ class TrajectoryStore(object):
         state_history = np.vstack((transition.state, int_frames[:-1,:]))
 
         # TTC Calculation
+        epsilon = 1e-6
         dx = state_history[:,6]
         dy = state_history[:,7]
         dvx = state_history[:,8]
         dvy = state_history[:,9]
-        ttc_x = np.where(np.abs(dvx) > 1e-6, dx/dvx, dx/1e-6)
-        ttc_y = np.where(np.abs(dvy) > 1e-6, dy/dvy, dy/1e-6)
+        ttc_x = np.divide(dx, dvx, out=np.full_like(dx, np.nan), where=(np.abs(dvx) > epsilon))
+        ttc_y = np.divide(dy, dvy, out=np.full_like(dy, np.nan), where=(np.abs(dvy) > epsilon))
+
+        small_mask = np.abs(dvx) <= epsilon
+        ttc_x[small_mask] = dx[small_mask] / epsilon
+        ttc_y[small_mask] = dy[small_mask] / epsilon
+
 
         # Populate Actions
         action_array = np.zeros(state_history.shape[0], dtype=int)

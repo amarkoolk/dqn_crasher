@@ -328,7 +328,7 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
     else:
         config["use_mobil"] = False
 
-    env.configure(config)
+    env.unwrapped.configure(config)
     obs, info = env.reset()
 
     flattened_ego_obs = obs[0].flatten()
@@ -446,7 +446,7 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
             else:
                 config["use_mobil"] = False
 
-            env.configure(config)
+            env.unwrapped.configure(config)
             obs, info = env.reset()
 
             flattened_ego_obs = obs[0].flatten()
@@ -518,7 +518,7 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
     else:
         config["use_mobil"] = False
 
-    env.configure(config)
+    env.unwrapped.configure(config)
     obs, info = env.reset()
 
     if ego_mobil:
@@ -643,7 +643,7 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
             else:
                 config["use_mobil"] = False
 
-            env.configure(config)
+            env.unwrapped.configure(config)
             obs, info = env.reset()
 
             if ego_mobil:
@@ -716,7 +716,7 @@ def pool_evaluation(env, cycle, ego_pool : ModelPool, npc_pool : ModelPool, args
         else:
             config["use_mobil"] = False
 
-        env.configure(config)
+        env.unwrapped.configure(config)
         obs, info = env.reset()
 
 
@@ -947,7 +947,7 @@ def test_ego_additional_state(env, ego_agent : DQN_Agent, npc_pool : ModelPool, 
     else:
         config["use_mobil"] = False
 
-    env.configure(config)
+    env.unwrapped.configure(config)
     obs, info = env.reset()
 
     flattened_ego_obs = obs[0].flatten()
@@ -1055,7 +1055,7 @@ def test_ego_additional_state(env, ego_agent : DQN_Agent, npc_pool : ModelPool, 
             else:
                 config["use_mobil"] = False
 
-            env.configure(config)
+            env.unwrapped.configure(config)
             obs, info = env.reset()
 
             flattened_ego_obs = obs[0].flatten()
@@ -1113,7 +1113,7 @@ def train_ego(env, ego_agent : DQN_Agent, args, device, model_path, use_pbar = T
     # Choose a model from the pool every episode
     npc_mobil = True
     config = {"use_mobil": True, "ego_vs_mobil": npc_mobil}
-    env.configure(config)
+    env.unwrapped.configure(config)
     obs, info = env.reset()
 
     flattened_ego_obs = obs[0].flatten()
