@@ -1106,6 +1106,9 @@ def train_ego(env, ego_agent : DQN_Agent, args, device, model_path, use_pbar = T
     ep_rew_total = np.zeros(0)
     ep_len_total = np.zeros(0)
     ep_speed_total = np.zeros(0)
+    right_lane_reward = 0.0
+    high_speed_reward = 0.0
+    collision_reward = 0.0
 
     t_step = 0
     ep_num = 0
@@ -1155,6 +1158,10 @@ def train_ego(env, ego_agent : DQN_Agent, args, device, model_path, use_pbar = T
         episode_speed += ego_state[0,3].cpu().numpy()
         npc_speed += ego_state[0,3].cpu().numpy() + ego_state[0,8].cpu().numpy()
 
+        high_speed_reward += info['rewards']['high_speed_reward']
+        right_lane_reward += info['rewards']['right_lane_reward']
+        collision_reward += info['rewards']['collision_reward']
+
 
         if done:
             # Save Trajectories that end in a Crash
@@ -1182,7 +1189,10 @@ def train_ego(env, ego_agent : DQN_Agent, args, device, model_path, use_pbar = T
                         "rollout/npc_speed_mean": npc_speed/duration,
                         "rollout/spawn_config": info['spawn_config'],
                         "rollout/use_mobil": npc_mobil,
-                        "rollout/epsilon": ego_agent.eps_threshold},
+                        "rollout/epsilon": ego_agent.eps_threshold,
+                        "rollout/right_lane_reward": right_lane_reward/duration,
+                        "rollout/high_speed_reward": high_speed_reward/duration,
+                        "rollout/collision_reward": collision_reward/duration},
                         step = ep_num)
                 
 
@@ -1191,6 +1201,10 @@ def train_ego(env, ego_agent : DQN_Agent, args, device, model_path, use_pbar = T
             episode_speed = 0
             npc_speed = 0
             ep_num += 1
+
+            right_lane_reward = 0.0
+            high_speed_reward = 0.0
+            collision_reward = 0.0
             
             obs, info = env.reset()
 
@@ -1245,6 +1259,10 @@ def ego_vs_npc(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
     ep_len_total = np.zeros(0)
     ep_speed_total = np.zeros(0)
 
+    right_lane_reward = 0.0
+    high_speed_reward = 0.0
+    collision_reward = 0.0
+
     t_step = 0
     ep_num = 0
 
@@ -1294,6 +1312,10 @@ def ego_vs_npc(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
         episode_speed += ego_state[0,3].cpu().numpy()
         npc_speed += ego_state[0,3].cpu().numpy() + ego_state[0,8].cpu().numpy()
 
+        high_speed_reward += info['rewards']['high_speed_reward']
+        right_lane_reward += info['rewards']['right_lane_reward']
+        collision_reward += info['rewards']['collision_reward']
+
 
         if done:
             # Save Trajectories that end in a Crash
@@ -1312,7 +1334,7 @@ def ego_vs_npc(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
                 if ep_speed_total.size > 100:
                     ep_speed_total = np.delete(ep_speed_total, 0)
 
-
+                # TODO(ark): Can separate wandb logging into separate function
                 wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
                         "rollout/ep_len_mean": ep_len_total.mean(),
                         "rollout/num_crashes": num_crashes[-1],
@@ -1320,7 +1342,17 @@ def ego_vs_npc(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
                         "rollout/ego_speed_mean": episode_speed/duration,
                         "rollout/npc_speed_mean": npc_speed/duration,
                         "rollout/spawn_config": info['spawn_config'],
-                        "rollout/epsilon": ego_agent.eps_threshold
+                        "rollout/epsilon": ego_agent.eps_threshold,
+                        "rollout/right_lane_reward": right_lane_reward/duration,
+                        "rollout/high_speed_reward": high_speed_reward/duration,
+                        "rollout/collision_reward": collision_reward/duration,
+                        f"rollout/{info['spawn_config']}/right_lane_reward": right_lane_reward/duration,
+                        f"rollout/{info['spawn_config']}/high_speed_reward": high_speed_reward/duration,
+                        f"rollout/{info['spawn_config']}/collision_reward": collision_reward/duration,
+                        f"rollout/{info['spawn_config']}/ego_speed_mean": episode_speed/duration,
+                        f"rollout/{info['spawn_config']}/npc_speed_mean": npc_speed/duration,
+                        f"rollout/{info['spawn_config']}/num_crashes": num_crashes[-1],
+                        f"rollout/{info['spawn_config']}/sr100": np.mean(num_crashes[-100:])
                         },
                         step = ep_num)
                 
@@ -1330,6 +1362,11 @@ def ego_vs_npc(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
             episode_speed = 0
             npc_speed = 0
             ep_num += 1
+
+
+            right_lane_reward = 0.0
+            high_speed_reward = 0.0
+            collision_reward = 0.0
 
             obs, info = env.reset()
 
@@ -1512,7 +1549,7 @@ def agent_eval(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
             run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, eval=True, sampling=args.sampling)
 
     
-    num_crashes = []
+    num_crashes = {}
     episode_rewards = 0
     duration = 0
     episode_speed = 0
@@ -1575,7 +1612,10 @@ def agent_eval(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
             if args.save_trajectories:    
                 ego_agent.trajectory_store.save(ep_num)
 
-            num_crashes.append(float(info['crashed']))
+            spawn_config = info['spawn_config']
+            if(spawn_config not in num_crashes):
+                num_crashes[spawn_config] = []
+            num_crashes[spawn_config].append(float(info['crashed']))
             if args.track:
                 ep_rew_total = np.append(ep_rew_total, episode_rewards)
                 ep_len_total = np.append(ep_len_total, duration)
@@ -1590,11 +1630,15 @@ def agent_eval(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
 
                 wandb.log({"rollout/ep_rew_mean": ep_rew_total.mean(),
                         "rollout/ep_len_mean": ep_len_total.mean(),
-                        "rollout/num_crashes": num_crashes[-1],
-                        "rollout/sr100": np.mean(num_crashes[-100:]),
+                        "rollout/num_crashes": sum(num_crashes[spawn_config]),
+                        "rollout/sr100": np.mean(num_crashes[spawn_config][-100:]),
                         "rollout/ego_speed_mean": episode_speed/duration,
                         "rollout/npc_speed_mean": npc_speed/duration,
                         "rollout/spawn_config": info['spawn_config'],
+                        f"rollout/{spawn_config}/ego_speed_mean": episode_speed/duration,
+                        f"rollout/{spawn_config}/npc_speed_mean": npc_speed/duration,
+                        f"rollout/{spawn_config}/num_crashes": np.sum(num_crashes[spawn_config]),
+                        f"rollout/{spawn_config}/sr100": np.mean(num_crashes[spawn_config][-100:])
                         },
                         step = ep_num)
                 

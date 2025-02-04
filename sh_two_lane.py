@@ -51,8 +51,8 @@ if __name__ == "__main__":
 
     if args.eval == False and args.use_pool == False:
 
-        ego_model = "ego_models/baseline_20_30/train_ego_0kdk0foe.pth"
-        npc_model = "NPC_V_MOBIL.pth"
+        ego_model = "ego_models/train_ego.pth"
+        npc_model = "NPC_v_MOBIL.pth"
         cycles = args.cycles
         ego_version = 0
         npc_version = 0
@@ -93,7 +93,7 @@ if __name__ == "__main__":
             # Hardening
             ma_config['adversarial'] = False
             ma_config['normalize_reward'] = True
-            ma_config['collision_reward'] = -1
+            ma_config['collision_reward'] = -100
             env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
 
             train_ego = True
@@ -212,7 +212,7 @@ if __name__ == "__main__":
             # Change Environment to Reward Collision
             ma_config['adversarial'] = False
             ma_config['normalize_reward'] = True
-            ma_config['collision_reward'] = -1
+            ma_config['collision_reward'] = -1000
             env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
 
             train_ego = True
@@ -253,7 +253,7 @@ if __name__ == "__main__":
         ma_config['ego_vs_mobil'] = True
         ma_config['adversarial'] = False
         ma_config['normalize_reward'] = True
-        ma_config['collision_reward'] = -1
+        ma_config['collision_reward'] = -1000
         env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
         agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, ego_or_npc='EGO')
         agent.load_model(path = os.path.join(model_dir, model))

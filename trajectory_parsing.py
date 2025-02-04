@@ -5,6 +5,8 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+from matplotlib.animation import FFMpegWriter
+
 
 import json
 import time
@@ -45,94 +47,98 @@ def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num)
     axes[1].set_title('Velocity vs Time')
     axes[1].grid()
 
-    for i in range(episode_array.shape[0]):
-        if i%frame_rate == 0:
-            action_value = episode_array[i,-4]
-            action_type = Action(action_value).name
-            action_string = f'{action_type}'
-            print(f'Episode: {episode_num}, Frame: {i}, Action: {episode_array[i,-4]}')
-            continue
+    writer = FFMpegWriter(fps=15)
 
-        ego_x = episode_array[i,1]
-        ego_y = episode_array[i,2]
-        ego_vx = episode_array[i,3]
-        ego_vy = episode_array[i,4]
+    with writer.saving(fig, f"{episode_num}.mp4", dpi=100):
+        for i in range(episode_array.shape[0]):
+            if i%frame_rate == 0:
+                action_value = episode_array[i,-4]
+                action_type = Action(action_value).name
+                action_string = f'{action_type}'
+                print(f'Episode: {episode_num}, Frame: {i}, Action: {episode_array[i,-4]}')
+                continue
 
-        npc_x = episode_array[i,6] + episode_array[i,1]
-        npc_y = episode_array[i,7] + episode_array[i,2]
-        npc_vx = episode_array[i,8] + episode_array[i,3]
-        npc_vy = episode_array[i,9] + episode_array[i,4]
+            ego_x = episode_array[i,1]
+            ego_y = episode_array[i,2]
+            ego_vx = episode_array[i,3]
+            ego_vy = episode_array[i,4]
 
-        print(f'MOBIL: {ego_vx:.2f}, {ego_vy:.2f}')
-        print(f'Ego: {npc_vx:.2f}, {npc_vy:.2f}')
+            npc_x = episode_array[i,6] + episode_array[i,1]
+            npc_y = episode_array[i,7] + episode_array[i,2]
+            npc_vx = episode_array[i,8] + episode_array[i,3]
+            npc_vy = episode_array[i,9] + episode_array[i,4]
 
-        ttcx = episode_array[i,-2]
-        ttcy = episode_array[i,-1]
+            print(f'NPC: {ego_vx:.2f}, {ego_vy:.2f}')
+            print(f'Ego: {npc_vx:.2f}, {npc_vy:.2f}')
 
-        ttcx_string = f'{ttcx:.2f}'
-        ttcy_string = f'{ttcy:.2f}'
-        if abs(ttcx) > 1000:
-            ttcx_string = 'INF'
-        if abs(ttcy) > 1000:
-            ttcy_string = 'INF'
+            ttcx = episode_array[i,-2]
+            ttcy = episode_array[i,-1]
 
-        # Rectangles
-        ego_centroid = (ego_x, ego_y)
-        ego_heading = np.arctan2(ego_vy, ego_vx)
-        ego_anchor = (ego_centroid[0] - 2.5*np.cos(ego_heading), ego_centroid[1] - 1.0*np.cos(ego_heading))
-        ego_bbox = patches.Rectangle(xy=ego_anchor, width=5, height=2, angle=np.rad2deg(ego_heading), fill=False, edgecolor='b')
+            ttcx_string = f'{ttcx:.2f}'
+            ttcy_string = f'{ttcy:.2f}'
+            if abs(ttcx) > 1000:
+                ttcx_string = 'INF'
+            if abs(ttcy) > 1000:
+                ttcy_string = 'INF'
 
-        npc_centroid = (npc_x,npc_y)
-        npc_heading = np.arctan2(npc_vy,npc_vx)
-        npc_anchor = (npc_centroid[0] - 2.5*np.cos(npc_heading), npc_centroid[1] - 1.0*np.cos(npc_heading))
-        npc_bbox = patches.Rectangle(xy=npc_anchor, width=5, height=2, angle=np.rad2deg(npc_heading), fill=False, edgecolor='r')
+            # Rectangles
+            ego_centroid = (ego_x, ego_y)
+            ego_heading = np.arctan2(ego_vy, ego_vx)
+            ego_anchor = (ego_centroid[0] - 2.5*np.cos(ego_heading), ego_centroid[1] - 1.0*np.cos(ego_heading))
+            ego_bbox = patches.Rectangle(xy=ego_anchor, width=5, height=2, angle=np.rad2deg(ego_heading), fill=False, edgecolor='b')
 
-        axes[0].add_patch(ego_bbox)
-        axes[0].add_patch(npc_bbox)
-        # axes[0].annotate(f'NPC: {ego_vx:.2f}', xy=ego_anchor, xytext=(ego_anchor[0]+1, ego_anchor[1]+1))
-        # axes[0].annotate(f'Ego: {npc_vx:.2f}', xy=npc_anchor, xytext=(npc_anchor[0]+1, npc_anchor[1]+1))
-        axes[0].annotate(f'MOBIL: {ego_vx:.2f}', xy=ego_anchor, xytext=(ego_anchor[0]+1, ego_anchor[1]+1))
-        axes[0].annotate(f'Ego: {npc_vx:.2f}', xy=npc_anchor, xytext=(npc_anchor[0]+1, npc_anchor[1]+1))
-        # axes.text(0.1, 0.99, f'Episode: {episode_num}, TTCX: {ttcx:.2f}, TTCY: {ttcy:.2f}', fontsize=12, ha='left', va='top', transform=axes.transAxes)
+            npc_centroid = (npc_x,npc_y)
+            npc_heading = np.arctan2(npc_vy,npc_vx)
+            npc_anchor = (npc_centroid[0] - 2.5*np.cos(npc_heading), npc_centroid[1] - 1.0*np.cos(npc_heading))
+            npc_bbox = patches.Rectangle(xy=npc_anchor, width=5, height=2, angle=np.rad2deg(npc_heading), fill=False, edgecolor='r')
 
-        # Modified lines with individual colors for TTCX and TTCY
-        axes[0].text(0.1, 0.99, f'Episode: {episode_num}, ', fontsize=12, ha='left', va='top', transform=axes[0].transAxes)
-        axes[0].text(0.3, 0.99, f'TTCX: {ttcx_string}', fontsize=12, ha='left', va='top', color='green', transform=axes[0].transAxes)
-        axes[0].text(0.5, 0.99, f'TTCY: {ttcy_string}', fontsize=12, ha='left', va='top', color='purple', transform=axes[0].transAxes)
-        axes[0].text(0.7, 0.99, f'Ego Action: {action_string}', fontsize=12, ha='left', va='top', color='purple', transform=axes[0].transAxes)
+            axes[0].add_patch(ego_bbox)
+            axes[0].add_patch(npc_bbox)
+            # axes[0].annotate(f'NPC: {ego_vx:.2f}', xy=ego_anchor, xytext=(ego_anchor[0]+1, ego_anchor[1]+1))
+            # axes[0].annotate(f'Ego: {npc_vx:.2f}', xy=npc_anchor, xytext=(npc_anchor[0]+1, npc_anchor[1]+1))
+            axes[0].annotate(f'EGO: {ego_vx:.2f}', xy=ego_anchor, xytext=(ego_anchor[0]+1, ego_anchor[1]+1))
+            axes[0].annotate(f'NPC: {npc_vx:.2f}', xy=npc_anchor, xytext=(npc_anchor[0]+1, npc_anchor[1]+1))
+            # axes.text(0.1, 0.99, f'Episode: {episode_num}, TTCX: {ttcx:.2f}, TTCY: {ttcy:.2f}', fontsize=12, ha='left', va='top', transform=axes.transAxes)
 
-        min_y = -15
-        max_y = 19
-        xy_scalar = (max_y-min_y)/1.2
-        min_x = npc_anchor[0]-xy_scalar
-        max_x = npc_anchor[0]+xy_scalar
-        axes[0].set_xlim(min_x, max_x)
-        axes[0].set_ylim(min_y, max_y)
-        axes[0].set_ylim(axes[0].get_ylim()[::-1])
-        # Draw the Road
-        axes[0].hlines(-2, min_x - 5, max_x + 5, colors='k')
-        axes[0].hlines(2, min_x - 5, max_x + 5, colors='k', linestyles='dashed')
-        axes[0].hlines(6, min_x - 5, max_x + 5, colors='k')
-        time_to_sleep = 0.01
-        if i == 1:
-            plt.waitforbuttonpress()
-        else:
-            plt.pause(time_to_sleep)
-        # plt.pause(time_to_sleep)
-        axes[0].clear()
+            # Modified lines with individual colors for TTCX and TTCY
+            axes[0].text(0.1, 0.99, f'Episode: {episode_num}, ', fontsize=12, ha='left', va='top', transform=axes[0].transAxes)
+            axes[0].text(0.3, 0.99, f'TTCX: {ttcx_string}', fontsize=12, ha='left', va='top', color='green', transform=axes[0].transAxes)
+            axes[0].text(0.5, 0.99, f'TTCY: {ttcy_string}', fontsize=12, ha='left', va='top', color='purple', transform=axes[0].transAxes)
+            axes[0].text(0.7, 0.99, f'Ego Action: {action_string}', fontsize=12, ha='left', va='top', color='purple', transform=axes[0].transAxes)
 
-        indices_to_plot = np.arange(0, episode_array.shape[0], 1)
-        indices_to_plot = indices_to_plot[indices_to_plot % frame_rate != 0]
-        vel_plot_data = episode_array[indices_to_plot, :]
+            min_y = -15
+            max_y = 19
+            xy_scalar = (max_y-min_y)/1.2
+            min_x = npc_anchor[0]-xy_scalar
+            max_x = npc_anchor[0]+xy_scalar
+            axes[0].set_xlim(min_x, max_x)
+            axes[0].set_ylim(min_y, max_y)
+            axes[0].set_ylim(axes[0].get_ylim()[::-1])
+            # Draw the Road
+            axes[0].hlines(-2, min_x - 5, max_x + 5, colors='k')
+            axes[0].hlines(2, min_x - 5, max_x + 5, colors='k', linestyles='dashed')
+            axes[0].hlines(6, min_x - 5, max_x + 5, colors='k')
+            time_to_sleep = 0.01
+            if i == 1:
+                plt.waitforbuttonpress()
+            else:
+                plt.pause(time_to_sleep)
+            # plt.pause(time_to_sleep)
+            axes[0].clear()
 
-        axes[1].plot(vel_plot_data[:i,3], label='MOBIL', color = 'blue')
-        axes[1].plot(vel_plot_data[:i,3] + vel_plot_data[:i,8], label='Ego', color = 'red')
+            indices_to_plot = np.arange(0, episode_array.shape[0], 1)
+            indices_to_plot = indices_to_plot[indices_to_plot % frame_rate != 0]
+            vel_plot_data = episode_array[indices_to_plot, :]
+
+            axes[1].plot(vel_plot_data[:i,3], label='Ego', color = 'blue')
+            axes[1].plot(vel_plot_data[:i,3] + vel_plot_data[:i,8], label='NPC', color = 'red')
 
 
-        # axes[1].plot(vel_plot_data[:i,3], label='NPC', color = 'blue')
-        # axes[1].plot(vel_plot_data[:i,3] + vel_plot_data[:i,8], label='Ego', color = 'red')
-        axes[1].legend(['MOBIL', 'Ego'])
-        plt.draw()
+            # axes[1].plot(vel_plot_data[:i,3], label='NPC', color = 'blue')
+            # axes[1].plot(vel_plot_data[:i,3] + vel_plot_data[:i,8], label='Ego', color = 'red')
+            axes[1].legend(['EGO', 'NPC'])
+            plt.draw()
+            writer.grab_frame()
     axes[0].clear()
     axes[1].clear()
 
@@ -285,7 +291,7 @@ def plot_traj_history(episode_array, framerate,
 
 
 
-trajectory_path = 'ego_trajectories_20_30/E0_V0_TrainEgo_False/EGO'
+trajectory_path = '2-cycle/trajectories/E0_V0_Eval/EGO'
 file_name = '4.json'
 
 with open(os.path.join(trajectory_path, file_name), 'r') as f:
@@ -309,10 +315,8 @@ episode_array = np.asarray(data[episode_keys[episode_num]])
 plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[episode_num])
 
 # Play all episodes
-for i in np.arange(1,num_episodes, 10):
-# i=0
-    episode_num = i
-    episode_array = np.asarray(data[episode_keys[episode_num]])
-    plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[episode_num])
-    # episode_array = np.asarray(data[episode_keys[-i]])
-    # plot_traj_history(episode_array, framerate, annotate=True)
+# for i in np.arange(1,num_episodes, 10):
+# # i=0
+#     episode_num = i
+#     episode_array = np.asarray(data[episode_keys[episode_num]])
+#     plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[episode_num])
