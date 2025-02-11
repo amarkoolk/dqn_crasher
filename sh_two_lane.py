@@ -51,8 +51,12 @@ if __name__ == "__main__":
 
     if args.eval == False and args.use_pool == False:
 
-        ego_model = "ego_models/train_ego.pth"
-        npc_model = "NPC_v_MOBIL.pth"
+        print("Training 1 Cycle of Ego vs NPC")
+
+        ego_model = "ego_models/baseline_20_30/train_ego_0kdk0foe.pth"
+        # npc_model = "NPC_v_MOBIL.pth"
+        npc_model = "" # Don't use baseline model to seed weights
+
         cycles = args.cycles
         ego_version = 0
         npc_version = 0
@@ -61,10 +65,12 @@ if __name__ == "__main__":
         if not os.path.exists(args.model_folder):
             os.makedirs(args.model_folder)
 
-        # Copy Baseline Model to Model Folder with New Name
-        shutil.copy(ego_model, os.path.join(args.model_folder, f"E{ego_version}_V{npc_version}_TrainEgo_True.pth"))
-        shutil.copy(npc_model, os.path.join(args.model_folder, f"E{ego_version}_V{npc_version}_TrainEgo_False.pth"))
-        
+        # Copy Models to Model Folder
+        # If no existing models, don't copy
+        if ego_model != "":
+            shutil.copy(ego_model, os.path.join(args.model_folder, f"E{ego_version}_V{npc_version}_TrainEgo_True.pth"))
+        if npc_model != "":
+            shutil.copy(npc_model, os.path.join(args.model_folder, f"E{ego_version}_V{npc_version}_TrainEgo_False.pth"))
 
         # Check if Trajectories Folder Exists
         if not os.path.exists(args.trajectories_folder):
@@ -126,6 +132,8 @@ if __name__ == "__main__":
         # Evaluate Each Model Pair
         for ego_version, ego_model in enumerate(ego_models):
             for npc_version, npc_model in enumerate(npc_models):
+                print(f"Ego Mode:l: {ego_model}, Ego Version: {ego_version}")
+                print(f"NPC Model: {npc_model}, NPC Version: {npc_version}")
                 env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
                 trajectory_path = trajectories_folder+ f'/E{ego_version}_V{npc_version}_Eval'
                 ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO', override_obs=10)

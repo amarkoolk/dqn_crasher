@@ -209,6 +209,7 @@ class DQN_Agent(object):
 
         self.policy_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
         self.target_net = DQN(self.n_observations, self.n_actions, hidden_layer=args.hidden_layer).to(device)
+
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
@@ -238,9 +239,11 @@ class DQN_Agent(object):
         else:
             # print('Action Space: {}'.format(torch.tensor(np.array([[env.action_space.sample()]]), device=device, dtype=torch.long).shape))
             if self.multi_agent:
-                return torch.tensor(np.array([[env.action_space[0].sample()]]), device=self.device, dtype=torch.long)
+                sampled_action = env.action_space[0].sample()
+                return torch.tensor(np.array([[sampled_action]]), device=self.device, dtype=torch.long)
             else:
-                return torch.tensor(np.array([[env.action_space.sample()]]), device=self.device, dtype=torch.long)
+                sampled_action = env.action_space.sample()
+                return torch.tensor(np.array([[sampled_action]]), device=self.device, dtype=torch.long)
         
     def optimize_model(self):
         if len(self.memory) < self.batch_size:

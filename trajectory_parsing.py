@@ -29,7 +29,8 @@ class Action(Enum):
   FASTER = 3
   SLOWER = 4
 
-def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num):
+# @profile
+def plot_trajectories(episode_array, frame_rate, fig, axes, time_buffer, episode_num, video_path):
 
     action_string = ''
 
@@ -37,7 +38,7 @@ def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num)
     # plt.plot(episode_array[:,3])
     # plt.show()
 
-    print(f'Episode Array Shape: {episode_array.shape}')
+    # print(f'Episode Array Shape: {episode_array.shape}')
 
 
     axes[1].set_xlim(0, episode_array.shape[0])
@@ -46,17 +47,41 @@ def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num)
     axes[1].set_ylabel('Velocity')
     axes[1].set_title('Velocity vs Time')
     axes[1].grid()
+    
+
+    # Get Starting Config (behind, adjacent, forward)
+    ego_x = episode_array[1,1]
+    ego_y = episode_array[1,2]
+    npc_x = episode_array[1,6] + episode_array[1,1]
+    npc_y = episode_array[1,7] + episode_array[1,2]
+
+    config_string = ''
+
+    threshold = 5
+    dist = ego_x - npc_x
+    if dist > threshold:
+        config_string = 'behind'
+    elif dist < -threshold:
+        config_string = 'forward'
+    else:
+        config_string = 'adjacent'
+
+    print(f'Config: {config_string}')
 
     writer = FFMpegWriter(fps=15)
 
-    with writer.saving(fig, f"{episode_num}.mp4", dpi=100):
+    with writer.saving(fig, os.path.join(video_path,config_string,f"{episode_num}.mp4"), dpi=100):
         for i in range(episode_array.shape[0]):
             if i%frame_rate == 0:
                 action_value = episode_array[i,-4]
                 action_type = Action(action_value).name
                 action_string = f'{action_type}'
-                print(f'Episode: {episode_num}, Frame: {i}, Action: {episode_array[i,-4]}')
+                # print(f'Episode: {episode_num}, Frame: {i}, Action: {episode_array[i,-4]}')
                 continue
+
+
+            axes[0].clear()
+            axes[1].clear()
 
             ego_x = episode_array[i,1]
             ego_y = episode_array[i,2]
@@ -68,8 +93,8 @@ def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num)
             npc_vx = episode_array[i,8] + episode_array[i,3]
             npc_vy = episode_array[i,9] + episode_array[i,4]
 
-            print(f'NPC: {ego_vx:.2f}, {ego_vy:.2f}')
-            print(f'Ego: {npc_vx:.2f}, {npc_vy:.2f}')
+            # print(f'NPC: {ego_vx:.2f}, {ego_vy:.2f}')
+            # print(f'Ego: {npc_vx:.2f}, {npc_vy:.2f}')
 
             ttcx = episode_array[i,-2]
             ttcy = episode_array[i,-1]
@@ -118,20 +143,20 @@ def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num)
             axes[0].hlines(-2, min_x - 5, max_x + 5, colors='k')
             axes[0].hlines(2, min_x - 5, max_x + 5, colors='k', linestyles='dashed')
             axes[0].hlines(6, min_x - 5, max_x + 5, colors='k')
-            time_to_sleep = 0.01
-            if i == 1:
-                plt.waitforbuttonpress()
-            else:
-                plt.pause(time_to_sleep)
-            # plt.pause(time_to_sleep)
-            axes[0].clear()
+            time_to_sleep = 0.001
+            # if i == 1:
+            #     plt.waitforbuttonpress()
+            # else:
+            #     plt.pause(time_to_sleep)
+            plt.pause(time_to_sleep)
 
             indices_to_plot = np.arange(0, episode_array.shape[0], 1)
             indices_to_plot = indices_to_plot[indices_to_plot % frame_rate != 0]
             vel_plot_data = episode_array[indices_to_plot, :]
 
-            axes[1].plot(vel_plot_data[:i,3], label='Ego', color = 'blue')
-            axes[1].plot(vel_plot_data[:i,3] + vel_plot_data[:i,8], label='NPC', color = 'red')
+            if i < vel_plot_data.shape[0]-1:
+                axes[1].scatter(i, vel_plot_data[i,3], label='Ego', color = 'blue')
+                axes[1].scatter(i, vel_plot_data[i,3] + vel_plot_data[i,8], label='NPC', color = 'red')
 
 
             # axes[1].plot(vel_plot_data[:i,3], label='NPC', color = 'blue')
@@ -139,6 +164,7 @@ def plot_trajectories(episode_array, frame_rate, axes, time_buffer, episode_num)
             axes[1].legend(['EGO', 'NPC'])
             plt.draw()
             writer.grab_frame()
+            
     axes[0].clear()
     axes[1].clear()
 
@@ -291,8 +317,8 @@ def plot_traj_history(episode_array, framerate,
 
 
 
-trajectory_path = '2-cycle/trajectories/E0_V0_Eval/EGO'
-file_name = '4.json'
+trajectory_path = 'only_behind_left/trajectories/E0_V1_Eval/EGO'
+file_name = '0.json'
 
 with open(os.path.join(trajectory_path, file_name), 'r') as f:
     data = json.load(f)
@@ -310,13 +336,23 @@ time_buffer = []
 
 
 # Play Specific Episode
-episode_num = 1
-episode_array = np.asarray(data[episode_keys[episode_num]])
-plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[episode_num])
+# episode_num = 1
+# episode_array = np.asarray(data[episode_keys[episode_num]])
+# plot_trajectories(episode_array, framerate, fig, axes, time_buffer, episode_keys[episode_num], video_path)
+
+video_path = os.path.join(trajectory_path, 'videos')
+behind_path = os.path.join(video_path, 'behind')
+forward_path = os.path.join(video_path, 'forward')
+adjacent_path = os.path.join(video_path, 'adjacent')
+if not os.path.exists(behind_path):
+    os.makedirs(behind_path)
+if not os.path.exists(forward_path):
+    os.makedirs(forward_path)
+if not os.path.exists(adjacent_path):    
+    os.makedirs(adjacent_path)
 
 # Play all episodes
-# for i in np.arange(1,num_episodes, 10):
-# # i=0
-#     episode_num = i
-#     episode_array = np.asarray(data[episode_keys[episode_num]])
-#     plot_trajectories(episode_array, framerate, axes, time_buffer, episode_keys[episode_num])
+for i in np.arange(1,num_episodes, 1):
+    episode_num = i
+    episode_array = np.asarray(data[episode_keys[episode_num]])
+    plot_trajectories(episode_array, framerate, fig, axes, time_buffer, episode_keys[episode_num], video_path)
