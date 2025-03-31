@@ -50,6 +50,8 @@ class Args:
     """the number of episodes for evaluation"""
     wandb_tag: str = None
     """the tag for wandb"""
+    frame_stack: int = 1
+    """the number of frames to stack for the environment"""
 
     # Environment specific arguments
     max_duration: int = 100
@@ -88,6 +90,8 @@ class Args:
     """the fraction of `total-timesteps` it takes from start-e to go end-e"""
 
     # NN specific arguments
+    num_hidden_layers: int = 1
+    """the number of hidden layers in the neural network"""
     hidden_layer: int = 256
     """the number of neurons in the hidden layer"""
     

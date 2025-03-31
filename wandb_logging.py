@@ -79,3 +79,48 @@ def log_evaluation(args, n_cycle):
             config=run_config
         )
     return run
+
+def log_stats(info, episode_statistics: dict, ego: bool):
+
+    spawn_config = info['spawn_config']
+    if(spawn_config not in episode_statistics['num_crashes']):
+        episode_statistics['num_crashes'][spawn_config] = []
+    episode_statistics['num_crashes'][spawn_config].append(float(info['crashed']))
+    episode_statistics['total_crashes'].append(float(info['crashed']))
+    episode_statistics['ep_rew_total'].append(episode_statistics['episode_rewards'])
+    episode_statistics['ep_len_total'].append(episode_statistics['episode_duration'])
+    episode_statistics['ego_speed_total'].append(episode_statistics['ego_speed']/episode_statistics['episode_duration'])
+    episode_statistics['npc_speed_total'].append(episode_statistics['npc_speed']/episode_statistics['episode_duration'])
+
+    wandb_log = {
+        "rollout/ep_rew_mean": sum(episode_statistics['ep_rew_total'])/len(episode_statistics['ep_rew_total']),
+        "rollout/ep_len_mean": sum(episode_statistics['ep_len_total'])/len(episode_statistics['ep_len_total']),
+        "rollout/num_crashes": sum(episode_statistics['total_crashes']),
+        "rollout/sr100": sum(episode_statistics['total_crashes'][-100:])/100,
+        "rollout/ego_speed_mean": episode_statistics['ego_speed']/episode_statistics['episode_duration'],
+        "rollout/npc_speed_mean": episode_statistics['npc_speed']/episode_statistics['episode_duration'],
+        "rollout/spawn_config": spawn_config,
+        "rollout/epsilon": episode_statistics['epsilon'],
+        "rollout/collision_reward": episode_statistics['collision_reward']/episode_statistics['episode_duration'],
+        f"rollout/{spawn_config}/ego_speed_mean": episode_statistics['ego_speed']/episode_statistics['episode_duration'],
+        f"rollout/{spawn_config}/npc_speed_mean": episode_statistics['npc_speed']/episode_statistics['episode_duration'],
+        f"rollout/{spawn_config}/num_crashes": sum(episode_statistics['num_crashes'][spawn_config]),
+        f"rollout/{spawn_config}/sr100": sum(episode_statistics['num_crashes'][spawn_config][-100:])/100,
+        f"rollout/{spawn_config}/collision_reward": episode_statistics['collision_reward']/episode_statistics['episode_duration'],
+    }
+
+    if ego:
+        wandb_log.update({
+                    "rollout/right_lane_reward": episode_statistics['right_lane_reward']/episode_statistics['episode_duration'],
+                    "rollout/high_speed_reward": episode_statistics['high_speed_reward']/episode_statistics['episode_duration'],
+                    f"rollout/{spawn_config}/right_lane_reward": episode_statistics['right_lane_reward']/episode_statistics['episode_duration'],
+                    f"rollout/{spawn_config}/high_speed_reward": episode_statistics['high_speed_reward']/episode_statistics['episode_duration'],
+        })
+    else:
+        wandb_log.update({
+                    "rollout/ttc_x_reward": episode_statistics['ttc_x_reward']/episode_statistics['episode_duration'],
+                    "rollout/ttc_y_reward": episode_statistics['ttc_y_reward']/episode_statistics['episode_duration'],
+                    f"rollout/{spawn_config}/ttc_x_reward": episode_statistics['ttc_x_reward']/episode_statistics['episode_duration'],
+                    f"rollout/{spawn_config}/ttc_y_reward": episode_statistics['ttc_y_reward']/episode_statistics['episode_duration'],
+        })
+    wandb.log(wandb_log, step = episode_statistics['episode_num'])

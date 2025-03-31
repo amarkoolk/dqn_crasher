@@ -49,15 +49,15 @@ if __name__ == "__main__":
     
     ma_config = load_config("env_configs/multi_agent.yaml")
 
-    ego_model = "testingv1/E0_V0_TrainEgo_True.pth"
-    npc_model = "NPC_v_MOBIL.pth"
+    ego_model = "sanity-check-bl/E1_V1_TrainEgo_True.pth"
+    npc_model = "sanity-check-bl/E0_V1_TrainEgo_False.pth"
 
-    ego_version = 0
-    npc_version = 0
+    ego_version = 1
+    npc_version = 1
 
     # Check if Trajectories Folder Exists
 
-    trajectories_folder = args.model_folder + "/trajectories"
+    trajectories_folder = args.model_folder + "/trajectories_e1v1"
     if not os.path.exists(trajectories_folder):
         os.makedirs(trajectories_folder)
 
@@ -66,6 +66,5 @@ if __name__ == "__main__":
     npc_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectories_folder, ego_or_npc='NPC', override_obs=10)
     ego_agent.load_model(path = ego_model)
     npc_agent.load_model(path = npc_model)
-    # agent_eval(env, ego_agent, npc_agent, args, device, ego_version, npc_version)
-    agent_vs_mobil(env, ego_agent, args, device)
+    agent_eval(env, ego_agent, npc_agent, args, device, ego_version, npc_version)
     env.close()

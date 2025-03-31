@@ -317,7 +317,7 @@ def plot_traj_history(episode_array, framerate,
 
 
 
-trajectory_path = 'only_behind_left/trajectories/E0_V1_Eval/EGO'
+trajectory_path = 'sanity-check-bl/trajectories_e1v1/EGO'
 file_name = '0.json'
 
 with open(os.path.join(trajectory_path, file_name), 'r') as f:

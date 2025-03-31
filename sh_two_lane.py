@@ -19,7 +19,7 @@ import wandb
 import gymnasium as gym
 from dqn_agent import DQN, DQN_Agent, TrajectoryStore
 from model_pool import ModelPool
-from multi_agent_dqn import multi_agent_training_loop, multi_agent_eval, ego_vs_npc_pool, npc_vs_ego_pool, pool_evaluation, agent_vs_mobil, ego_vs_npc, npc_vs_ego, agent_eval
+from multi_agent_dqn import multi_agent_training_loop, multi_agent_eval, ego_vs_npc_pool, npc_vs_ego_pool, pool_evaluation, agent_vs_mobil, test_agents, train_agents
 from multi_agent_pool import multi_agent_loop
 from wandb_logging import initialize_logging
 from config import load_config
@@ -48,10 +48,9 @@ if __name__ == "__main__":
         os.makedirs(args.model_folder)
     
     ma_config = load_config("env_configs/multi_agent.yaml")
+    ma_config['observation']['observation_config']['frame_stack'] = args.frame_stack
 
     if args.eval == False and args.use_pool == False:
-
-        print("Training 1 Cycle of Ego vs NPC")
 
         ego_model = "ego_models/baseline_20_30/train_ego_0kdk0foe.pth"
         # npc_model = "NPC_v_MOBIL.pth"
@@ -73,27 +72,33 @@ if __name__ == "__main__":
             shutil.copy(npc_model, os.path.join(args.model_folder, f"E{ego_version}_V{npc_version}_TrainEgo_False.pth"))
 
         # Check if Trajectories Folder Exists
-        if not os.path.exists(args.trajectories_folder):
-            os.makedirs(args.trajectories_folder)
+        traj_folder = os.path.join(args.model_folder, args.trajectories_folder)
+        if not os.path.exists(traj_folder):
+            os.makedirs(traj_folder)
 
         for cycle in range(cycles):
             ma_config['adversarial'] = True
             ma_config['normalize_reward'] = False
             ma_config['collision_reward'] = 400
             env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+
+            action_space = env.action_space[0]
+            n_actions = action_space.n
+            n_obs = 10 * args.frame_stack
+
             train_ego = False
-            trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_True'
-            ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO', override_obs=10)
+            trajectory_path = traj_folder + f'/E{ego_version}_V{npc_version}_TrainEgo_True'
+            ego_agent = DQN_Agent(n_obs, n_actions, action_space, args, device, save_trajectories=args.save_trajectories, trajectory_path=trajectory_path, ego_or_npc='EGO')
             ego_agent.load_model(path = ego_model)
-            trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_False'
-            npc_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='NPC', override_obs=10)
+            trajectory_path = traj_folder + f'/E{ego_version}_V{npc_version}_TrainEgo_False'
+            npc_agent = DQN_Agent(n_obs, n_actions, action_space, args, device, save_trajectories=args.save_trajectories, trajectory_path=trajectory_path, ego_or_npc='NPC')
             npc_agent.load_model(path = npc_model)
 
             # Falsification
             npc_version +=1
             npc_model = f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth"
             npc_model = os.path.join(args.model_folder, npc_model)
-            npc_vs_ego(env, npc_agent, ego_agent, args, device, ego_version, npc_version, npc_model)
+            train_agents(env, ego_agent, npc_agent, args, device, ego_version, npc_version, npc_model, train_ego=False)
             env.close()
 
             # Hardening
@@ -106,7 +111,7 @@ if __name__ == "__main__":
             ego_version +=1
             ego_model = f"E{ego_version}_V{npc_version}_TrainEgo_{train_ego}.pth"
             ego_model = os.path.join(args.model_folder, ego_model)
-            ego_vs_npc(env, ego_agent, npc_agent, args, device, ego_version, npc_version, ego_model)
+            train_agents(env, ego_agent, npc_agent, args, device, ego_version, npc_version, ego_model, train_ego=True)
             env.close()
 
     elif args.eval == True and args.use_pool == False:
@@ -135,12 +140,17 @@ if __name__ == "__main__":
                 print(f"Ego Mode:l: {ego_model}, Ego Version: {ego_version}")
                 print(f"NPC Model: {npc_model}, NPC Version: {npc_version}")
                 env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+
+                action_space = env.action_space[0]
+                n_actions = action_space[0].n
+                n_obs = 10 * args.frame_stack
+
                 trajectory_path = trajectories_folder+ f'/E{ego_version}_V{npc_version}_Eval'
-                ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='EGO', override_obs=10)
-                npc_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='NPC', override_obs=10)
+                ego_agent = DQN_Agent(n_obs, n_actions, action_space, args, device, save_trajectories=args.save_trajectories, trajectory_path=trajectory_path, ego_or_npc='EGO', override_obs=10)
+                npc_agent = DQN_Agent(n_obs, n_actions, action_space, args, device, save_trajectories=args.save_trajectories, trajectory_path=trajectory_path, ego_or_npc='NPC', override_obs=10)
                 ego_agent.load_model(path = os.path.join(model_folder, ego_model))
                 npc_agent.load_model(path = os.path.join(model_folder, npc_model))
-                agent_eval(env, ego_agent, npc_agent, args, device, ego_version, npc_version)
+                test_agents(env, ego_agent, npc_agent, args, device, ego_version, npc_version)
                 env.close()
 
 

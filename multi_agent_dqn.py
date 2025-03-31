@@ -1,26 +1,20 @@
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
 
 import os
-import random
-import json
-import math
 import numpy as np
-from typing import TypeAlias, List, Tuple
-from collections import namedtuple
+from collections import deque
 
-from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
+from buffers import Transition
 
 from tqdm import tqdm
 import wandb
-import gymnasium as gym
-from dqn_agent import DQN, DQN_Agent, TrajectoryStore
+from dqn_agent import DQN_Agent
 from model_pool import ModelPool
-from wandb_logging import initialize_logging, log_evaluation
-from config import load_config
-from create_env import make_env, make_vector_env
+from wandb_logging import initialize_logging, log_stats
+from create_env import make_vector_env
+
+import helpers
 
 
 
@@ -77,11 +71,11 @@ def multi_agent_training_loop(cycle, ego_version, npc_version, ego_model, npc_mo
     # Testing Loop
     while t_step < args.total_timesteps:
         if train_ego:
-            ego_action = torch.squeeze(ego_agent.select_action(ego_state, env, t_step))
+            ego_action = torch.squeeze(ego_agent.select_action(ego_state, t_step))
             npc_action = torch.squeeze(npc_agent.predict(npc_state))
         else:
             ego_action = torch.squeeze(ego_agent.predict(ego_state))
-            npc_action = torch.squeeze(npc_agent.select_action(npc_state, env, t_step))
+            npc_action = torch.squeeze(npc_agent.select_action(npc_state, t_step))
 
         if args.num_envs == 1:
             ego_action = ego_action.view(1,1)
@@ -346,9 +340,9 @@ def ego_vs_npc_pool(env, ego_agent : DQN_Agent, npc_pool : ModelPool, args, devi
     # Testing Loop
     while t_step < args.total_timesteps:
         if(npc_mobil):
-            ego_action = ego_agent.select_action(ego_state, env, t_step)
+            ego_action = ego_agent.select_action(ego_state, t_step)
         else:
-            ego_action = ego_agent.select_action(ego_state, env, t_step)
+            ego_action = ego_agent.select_action(ego_state, t_step)
             npc_action = npc_pool.predict(npc_state)
 
         if(npc_mobil):
@@ -540,10 +534,10 @@ def npc_vs_ego_pool(env, npc_agent : DQN_Agent, ego_pool : ModelPool, args, devi
     while t_step < args.total_timesteps:
         
         if(ego_mobil):
-            npc_action = npc_agent.select_action(npc_state, env, t_step)
+            npc_action = npc_agent.select_action(npc_state, t_step)
         else:
             ego_action = ego_pool.predict(ego_state)
-            npc_action = npc_agent.select_action(npc_state, env, t_step)
+            npc_action = npc_agent.select_action(npc_state, t_step)
 
         if(ego_mobil):
             obs, reward, terminated, truncated, info = env.step((npc_action.cpu().numpy(),))
@@ -989,9 +983,9 @@ def test_ego_additional_state(env, ego_agent : DQN_Agent, npc_pool : ModelPool, 
     # Testing Loop
     while t_step < args.total_timesteps:
         if(npc_mobil):
-            ego_action = ego_agent.select_action(ego_state, env, t_step)
+            ego_action = ego_agent.select_action(ego_state, t_step)
         else:
-            ego_action = ego_agent.select_action(ego_state, env, t_step)
+            ego_action = ego_agent.select_action(ego_state, t_step)
             npc_action = npc_pool.predict(npc_state)
 
         if(npc_mobil):
@@ -1157,7 +1151,7 @@ def train_ego(env, ego_agent : DQN_Agent, args, device, model_path, use_pbar = T
     
     # Testing Loop
     while t_step < args.total_timesteps:
-        ego_action = ego_agent.select_action(ego_state, env, t_step)
+        ego_action = ego_agent.select_action(ego_state, t_step)
         obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(),))
 
         reward = torch.tensor(reward, dtype = torch.float32, device=device)
@@ -1259,339 +1253,7 @@ def train_ego(env, ego_agent : DQN_Agent, args, device, model_path, use_pbar = T
     wandb.finish()
     env.close()
 
-
-def ego_vs_npc(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, ego_version, npc_version, model_path, use_pbar = True):
-
-    assert ego_agent.multi_agent, "Ego Agent must be a multi-agent agent"
-    assert npc_agent.multi_agent, "NPC Agent must be a multi-agent agent"
-
-    if use_pbar:
-        pbar = tqdm(total=args.total_timesteps)
-    else:
-        pbar = None
-
-    if args.track:
-        if wandb.run is not None:
-            wandb.finish()
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=True, npc_pool_size=None, ego_pool_size=None, sampling=args.sampling)
-        else:
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=True, npc_pool_size=None, ego_pool_size=None, sampling=args.sampling)
-
-    
-    num_crashes = {}
-    total_crashes = []
-    episode_rewards = 0
-    duration = 0
-    episode_speed = 0
-    npc_speed = 0
-    ep_rew_total = np.zeros(0)
-    ep_len_total = np.zeros(0)
-    ep_speed_total = np.zeros(0)
-
-    right_lane_reward = 0.0
-    high_speed_reward = 0.0
-    collision_reward = 0.0
-
-    t_step = 0
-    ep_num = 0
-
-    obs, info = env.reset()
-
-    flattened_ego_obs = obs[0].flatten()
-    ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-    ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-    flattened_npc_obs = obs[1].flatten()
-    npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-    npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
-
-        
-    
-    # Testing Loop
-    while t_step < args.total_timesteps:
-        ego_action = ego_agent.select_action(ego_state, env, t_step)
-        npc_action = npc_agent.predict(npc_state)
-
-        obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
-
-        reward = torch.tensor(reward, dtype = torch.float32, device=device)
-        done = terminated | truncated
-
-        int_frames = info['int_frames']
-
-        if args.save_trajectories:
-            save_state = ego_state.cpu().numpy()
-            save_action = ego_action.cpu().numpy()
-            save_reward = reward.cpu().numpy()
-            if terminated:
-                ego_agent.trajectory_store.add(Transition(save_state, save_action, None, save_reward), int_frames[:,:ego_agent.n_observations])
-            else:
-                ego_agent.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten()[:ego_agent.n_observations], save_reward), int_frames[:,:ego_agent.n_observations])
-
-        flattened_ego_obs = obs[0].flatten()
-        ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-        next_state = torch.tensor(ego_obs.reshape(1,len(ego_obs)), dtype=torch.float32, device=device)
-        ego_state = ego_agent.update(ego_state, ego_action, next_state, reward, terminated)
-
-        flattened_npc_obs = obs[1].flatten()
-        npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-        npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
-
-        episode_rewards = episode_rewards + reward.cpu().numpy()
-        duration += 1
-        episode_speed += ego_state[0,3].cpu().numpy()
-        npc_speed += ego_state[0,3].cpu().numpy() + ego_state[0,8].cpu().numpy()
-
-        high_speed_reward += info['rewards']['high_speed_reward']
-        right_lane_reward += info['rewards']['right_lane_reward']
-        collision_reward += info['rewards']['collision_reward']
-
-
-        if done:
-            # Save Trajectories that end in a Crash
-            if args.save_trajectories:    
-                ego_agent.trajectory_store.save(ep_num)
-
-            spawn_config = info['spawn_config']
-            if(spawn_config not in num_crashes):
-                num_crashes[spawn_config] = []
-            num_crashes[spawn_config].append(float(info['crashed']))
-            total_crashes.append(float(info['crashed']))
-
-            if args.track:
-                ep_rew_total = np.append(ep_rew_total, episode_rewards)
-                ep_len_total = np.append(ep_len_total, duration)
-                ep_speed_total = np.append(ep_speed_total, episode_speed/duration)
-                if ep_rew_total.size > 100:
-                    ep_rew_total = np.delete(ep_rew_total, 0)
-                if ep_len_total.size > 100:
-                    ep_len_total = np.delete(ep_len_total, 0)
-                if ep_speed_total.size > 100:
-                    ep_speed_total = np.delete(ep_speed_total, 0)
-
-                # TODO(ark): Can separate wandb logging into separate function
-                wandb.log({"rollout/ep_rew_mean": np.mean(ep_rew_total),
-                        "rollout/ep_len_mean": np.mean(ep_len_total),
-                        "rollout/num_crashes": np.sum(total_crashes),
-                        "rollout/sr100": np.mean(total_crashes[-100:]),
-                        "rollout/ego_speed_mean": episode_speed/duration,
-                        "rollout/npc_speed_mean": npc_speed/duration,
-                        "rollout/spawn_config": info['spawn_config'],
-                        "rollout/epsilon": ego_agent.eps_threshold,
-                        "rollout/right_lane_reward": right_lane_reward/duration,
-                        "rollout/high_speed_reward": high_speed_reward/duration,
-                        "rollout/collision_reward": collision_reward/duration,
-                        f"rollout/{info['spawn_config']}/right_lane_reward": right_lane_reward/duration,
-                        f"rollout/{info['spawn_config']}/high_speed_reward": high_speed_reward/duration,
-                        f"rollout/{info['spawn_config']}/collision_reward": collision_reward/duration,
-                        f"rollout/{spawn_config}/ego_speed_mean": episode_speed/duration,
-                        f"rollout/{spawn_config}/npc_speed_mean": npc_speed/duration,
-                        f"rollout/{spawn_config}/num_crashes": np.sum(num_crashes[spawn_config]),
-                        f"rollout/{spawn_config}/sr100": np.mean(num_crashes[spawn_config][-100:])
-                        },
-                        step = ep_num)
-                
-
-            episode_rewards = 0
-            duration = 0
-            episode_speed = 0
-            npc_speed = 0
-            ep_num += 1
-
-
-            right_lane_reward = 0.0
-            high_speed_reward = 0.0
-            collision_reward = 0.0
-
-            obs, info = env.reset()
-
-            flattened_ego_obs = obs[0].flatten()
-            ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-            ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-            flattened_npc_obs = obs[1].flatten()
-            npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-            npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
-            
-        t_step += 1
-        pbar.update(1)
-
-
-    if use_pbar:
-        pbar.close()
-
-    ego_agent.save_model(path=model_path)
-
-    if args.save_trajectories:
-        file_path = os.path.join(ego_agent.trajectory_store.file_dir, f'{ego_agent.trajectory_store.file_interval}')
-        ego_agent.trajectory_store.write(file_path, 'json')
-
-    wandb.finish()
-    env.close()
-
-def npc_vs_ego(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, ego_version, npc_version, model_path, use_pbar = True):
-
-    assert ego_agent.multi_agent, "Ego Agent must be a multi-agent agent"
-    assert npc_agent.multi_agent, "NPC Agent must be a multi-agent agent"
-
-    if use_pbar:
-        pbar = tqdm(total=args.total_timesteps)
-    else:
-        pbar = None
-
-    if args.track:
-        if wandb.run is not None:
-            wandb.finish()
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, npc_pool_size=None, ego_pool_size=None, sampling=args.sampling)
-        else:
-            run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, npc_pool_size=None, ego_pool_size=None, sampling=args.sampling)
-
-    
-    num_crashes = {}
-    total_crashes = []
-    episode_rewards = 0
-    duration = 0
-    episode_speed = 0
-    npc_speed = 0
-    ep_rew_total = []
-    ep_len_total = []
-    ep_speed_total = []
-
-    t_step = 0
-    ep_num = 0
-
-    obs, info = env.reset()
-
-    flattened_ego_obs = obs[0].flatten()
-    ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-    ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-    flattened_npc_obs = obs[1].flatten()
-    npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-    npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
-
-    ttc_x_reward = 0.0
-    ttc_y_reward = 0.0
-    collision_reward = 0.0
-
-    
-    
-    # Testing Loop
-    while t_step < args.total_timesteps:
-        ego_action = ego_agent.predict(ego_state)
-        npc_action = npc_agent.select_action(npc_state, env, t_step)
-
-        obs, reward, terminated, truncated, info = env.step((ego_action.cpu().numpy(), npc_action.cpu().numpy()))
-        # env.render()
-        
-
-        reward = torch.tensor(reward, dtype = torch.float32, device=device)
-        done = terminated | truncated
-
-        int_frames = info['int_frames']
-
-        if args.save_trajectories:
-            save_state = ego_state.cpu().numpy()
-            save_action = ego_action.cpu().numpy()
-            save_reward = reward.cpu().numpy()
-            if terminated:
-                ego_agent.trajectory_store.add(Transition(save_state, save_action, None, save_reward), int_frames[:,:ego_agent.n_observations])
-            else:
-                ego_agent.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten()[:ego_agent.n_observations], save_reward), int_frames[:,:ego_agent.n_observations])
-
-        flattened_ego_obs = obs[0].flatten()
-        ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-        ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-
-        flattened_npc_obs = obs[1].flatten()
-        npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-        next_state = torch.tensor(npc_obs.reshape(1,len(npc_obs)), dtype=torch.float32, device=device)
-        npc_state = npc_agent.update(npc_state, npc_action, next_state, reward, terminated)
-
-        episode_rewards = episode_rewards + reward.cpu().numpy()
-        duration += 1
-        episode_speed += ego_state[0,3].cpu().numpy()
-        npc_speed += ego_state[0,3].cpu().numpy() + ego_state[0,8].cpu().numpy()
-
-        ttc_x_reward += info['rewards']['ttc_x_reward']
-        ttc_y_reward += info['rewards']['ttc_y_reward']
-        collision_reward += info['rewards']['collision_reward']
-
-
-        if done:
-            # Save Trajectories that end in a Crash
-            if args.save_trajectories:    
-                ego_agent.trajectory_store.save(ep_num)
-
-            
-            spawn_config = info['spawn_config']
-            if(spawn_config not in num_crashes):
-                num_crashes[spawn_config] = []
-            num_crashes[spawn_config].append(float(info['crashed']))
-            total_crashes.append(float(info['crashed']))
-            
-            if args.track:
-
-                ep_rew_total.append(episode_rewards)
-                ep_len_total.append(duration)
-                ep_speed_total.append(episode_speed/duration)
-
-
-                wandb.log({"rollout/ep_rew_mean": np.mean(ep_rew_total),
-                        "rollout/ep_len_mean": np.mean(ep_len_total),
-                        "rollout/num_crashes": np.sum(total_crashes),
-                        "rollout/sr100": np.mean(total_crashes[-100:]),
-                        "rollout/ego_speed_mean": episode_speed/duration,
-                        "rollout/npc_speed_mean": npc_speed/duration,
-                        "rollout/spawn_config": info['spawn_config'],
-                        "rollout/epsilon": npc_agent.eps_threshold,
-                        "rollout/ttc_x_reward": ttc_x_reward/duration,
-                        "rollout/ttc_y_reward": ttc_y_reward/duration,
-                        "rollout/collision_reward": collision_reward/duration,
-                        f"rollout/{spawn_config}/ego_speed_mean": episode_speed/duration,
-                        f"rollout/{spawn_config}/npc_speed_mean": npc_speed/duration,
-                        f"rollout/{spawn_config}/num_crashes": np.sum(num_crashes[spawn_config]),
-                        f"rollout/{spawn_config}/sr100": np.mean(num_crashes[spawn_config][-100:])
-                        },
-                        step = ep_num)
-                
-
-            episode_rewards = 0
-            duration = 0
-            episode_speed = 0
-            npc_speed = 0
-            ep_num += 1
-
-            ttc_x_reward = 0.0
-            ttc_y_reward = 0.0
-            collision_reward = 0.0
-
-            obs, info = env.reset()
-
-            flattened_ego_obs = obs[0].flatten()
-            ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-            ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-            flattened_npc_obs = obs[1].flatten()
-            npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-            npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
-            
-        t_step += 1
-        pbar.update(1)
-
-
-    if use_pbar:
-        pbar.close()
-
-    npc_agent.save_model(path=model_path)
-
-    if args.save_trajectories:
-        file_path = os.path.join(ego_agent.trajectory_store.file_dir, f'{ego_agent.trajectory_store.file_interval}')
-        ego_agent.trajectory_store.write(file_path, 'json')
-
-    wandb.finish()
-    env.close()
-
-def agent_eval(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, ego_version, npc_version, use_pbar = True):
-
-    assert ego_agent.multi_agent, "Ego Agent must be a multi-agent agent"
-    assert npc_agent.multi_agent, "NPC Agent must be a multi-agent agent"
+def test_agents(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, ego_version, npc_version, use_pbar = True):
 
     if use_pbar:
         pbar = tqdm(total=args.evaluation_episodes)
@@ -1606,32 +1268,17 @@ def agent_eval(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
             run = initialize_logging(args, ego_version=ego_version, npc_version=npc_version, train_ego=False, eval=True, sampling=args.sampling)
 
     
-    num_crashes = {}
-    total_crashes = []
-    episode_rewards = 0
-    duration = 0
-    episode_speed = 0
-    npc_speed = 0
-    ep_rew_total = np.zeros(0)
-    ep_len_total = np.zeros(0)
-    ep_speed_total = np.zeros(0)
+    episode_statistics = helpers.initialize_stats()
 
     t_step = 0
-    ep_num = 0
 
     obs, info = env.reset()
-
-    flattened_ego_obs = obs[0].flatten()
-    ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-    ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-    flattened_npc_obs = obs[1].flatten()
-    npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-    npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
+    ego_state, npc_state = helpers.obs_to_state(obs, ego_agent, npc_agent, device)
 
         
     
     # Testing Loop
-    while ep_num < args.evaluation_episodes:
+    while episode_statistics['episode_num'] < args.evaluation_episodes:
         ego_action = ego_agent.predict(ego_state)
         npc_action = npc_agent.predict(npc_state)
 
@@ -1651,72 +1298,22 @@ def agent_eval(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
             else:
                 ego_agent.trajectory_store.add(Transition(save_state, save_action, obs[0].flatten()[:ego_agent.n_observations], save_reward), int_frames[:,:ego_agent.n_observations])
 
-        flattened_ego_obs = obs[0].flatten()
-        ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-        ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-
-        flattened_npc_obs = obs[1].flatten()
-        npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-        npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
-
-        episode_rewards = episode_rewards + reward.cpu().numpy()
-        duration += 1
-        episode_speed += ego_state[0,3].cpu().numpy()
-        npc_speed += ego_state[0,3].cpu().numpy() + ego_state[0,8].cpu().numpy()
-
+        
+        ego_state, npc_state = helpers.obs_to_state(obs, ego_agent, npc_agent, device)
+        helpers.populate_stats(info, npc_agent, ego_state, npc_state, reward, episode_statistics, False)
 
         if done:
             # Save Trajectories that end in a Crash
             if args.save_trajectories:    
-                ego_agent.trajectory_store.save(ep_num)
-
-            spawn_config = info['spawn_config']
-            if(spawn_config not in num_crashes):
-                num_crashes[spawn_config] = []
-            num_crashes[spawn_config].append(float(info['crashed']))
-            total_crashes.append(float(info['crashed']))
+                ego_agent.trajectory_store.save(episode_statistics['episode_num'])
 
             if args.track:
-                ep_rew_total = np.append(ep_rew_total, episode_rewards)
-                ep_len_total = np.append(ep_len_total, duration)
-                ep_speed_total = np.append(ep_speed_total, episode_speed/duration)
-                if ep_rew_total.size > 100:
-                    ep_rew_total = np.delete(ep_rew_total, 0)
-                if ep_len_total.size > 100:
-                    ep_len_total = np.delete(ep_len_total, 0)
-                if ep_speed_total.size > 100:
-                    ep_speed_total = np.delete(ep_speed_total, 0)
-
-
-                wandb.log({"rollout/ep_rew_mean": np.mean(ep_rew_total),
-                        "rollout/ep_len_mean": np.mean(ep_len_total),
-                        "rollout/num_crashes": np.sum(total_crashes),
-                        "rollout/sr100": np.mean(total_crashes[-100:]),
-                        "rollout/ego_speed_mean": episode_speed/duration,
-                        "rollout/npc_speed_mean": npc_speed/duration,
-                        "rollout/spawn_config": info['spawn_config'],
-                        f"rollout/{spawn_config}/ego_speed_mean": episode_speed/duration,
-                        f"rollout/{spawn_config}/npc_speed_mean": npc_speed/duration,
-                        f"rollout/{spawn_config}/num_crashes": np.sum(num_crashes[spawn_config]),
-                        f"rollout/{spawn_config}/sr100": np.mean(num_crashes[spawn_config][-100:])
-                        },
-                        step = ep_num)
+                log_stats(info, episode_statistics, ego = False)
                 
-
-            episode_rewards = 0
-            duration = 0
-            episode_speed = 0
-            npc_speed = 0
-            ep_num += 1
+            helpers.reset_stats(episode_statistics)
 
             obs, info = env.reset()
-
-            flattened_ego_obs = obs[0].flatten()
-            ego_obs = flattened_ego_obs[:ego_agent.n_observations]
-            ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-            flattened_npc_obs = obs[1].flatten()
-            npc_obs = flattened_npc_obs[:npc_agent.n_observations]
-            npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
+            ego_state, npc_state = helpers.obs_to_state(obs, ego_agent, npc_agent, device)
             
             pbar.update(1)
         t_step += 1
@@ -1730,4 +1327,186 @@ def agent_eval(env, ego_agent : DQN_Agent, npc_agent : DQN_Agent, args, device, 
         ego_agent.trajectory_store.write(file_path, 'json')
 
     wandb.finish()
-    env.close()
+
+def train_agents(
+    env,
+    ego_agent: DQN_Agent,
+    npc_agent: DQN_Agent,
+    args,
+    device,
+    ego_version,
+    npc_version,
+    model_path,
+    train_ego: bool = True,
+    use_pbar: bool = True
+):
+    """
+    A combined function that can:
+      - Run EGO vs. NPC (train_ego=True)
+      - Run NPC vs. EGO (train_ego=False)
+    
+    Args:
+        env: The environment.
+        ego_agent (DQN_Agent): The ego agent (multi-agent).
+        npc_agent (DQN_Agent): The npc agent (multi-agent).
+        args: Training/testing arguments (must contain total_timesteps, track, etc.).
+        device: Torch device.
+        ego_version: Version/tag for ego agent logging.
+        npc_version: Version/tag for npc agent logging.
+        model_path: Where to save the model of whichever agent is being trained.
+        train_ego: If True, ego_agent is training; if False, npc_agent is training.
+        use_pbar: Whether to display a progress bar.
+    """
+
+    # Decide which agent does "select_action" vs "predict"
+    if train_ego:
+        train_agent = ego_agent
+        fixed_agent = npc_agent
+        # For logging
+        train_ego_flag = True
+    else:
+        train_agent = npc_agent
+        fixed_agent = ego_agent
+        train_ego_flag = False
+
+    # Progress bar
+    if use_pbar:
+        pbar = tqdm(total=args.total_timesteps)
+    else:
+        pbar = None
+
+    # Logging
+    if args.track:
+        if wandb.run is not None:
+            wandb.finish()
+        run = initialize_logging(
+            args,
+            ego_version=ego_version,
+            npc_version=npc_version,
+            train_ego=train_ego_flag,
+            npc_pool_size=None,
+            ego_pool_size=None,
+            sampling=args.sampling
+        )
+
+    episode_statistics = helpers.initialize_stats()
+    t_step = 0
+
+    obs, info = env.reset()
+    ego_state, npc_state = helpers.obs_to_state(obs, ego_agent, npc_agent, device)
+
+    # Main loop
+    while t_step < args.total_timesteps:
+        # The training agent calls select_action
+        # The fixed agent calls predict
+        if train_ego:
+            ego_action = train_agent.select_action(ego_state, t_step)
+            npc_action = fixed_agent.predict(npc_state)
+        else:
+            ego_action = fixed_agent.predict(ego_state)
+            npc_action = train_agent.select_action(npc_state, t_step)
+
+        # Step in the environment
+        obs, reward, terminated, truncated, info = env.step(
+            (ego_action.cpu().numpy(), npc_action.cpu().numpy())
+        )
+
+        reward = torch.tensor(reward, dtype=torch.float32, device=device)
+        done = terminated or truncated
+        int_frames = info["int_frames"]
+
+        # Save trajectories for the *training agent*
+        # Here we assume we only store data for the agent that’s currently training.
+        if args.save_trajectories:
+            if train_ego:
+                # Ego is being trained
+                save_state = ego_state.cpu().numpy()
+                save_action = ego_action.cpu().numpy()
+            else:
+                # NPC is being trained
+                save_state = npc_state.cpu().numpy()
+                save_action = npc_action.cpu().numpy()
+
+            save_reward = reward.cpu().numpy()
+
+            if terminated:
+                train_agent.trajectory_store.add(
+                    Transition(save_state, save_action, None, save_reward),
+                    int_frames[:, : train_agent.n_observations],
+                )
+            else:
+                # obs[0] is ego's observation, obs[1] is NPC's observation
+                # so we index properly depending on who is training.
+                obs_index = 0 if train_ego else 1
+                train_agent.trajectory_store.add(
+                    Transition(
+                        save_state,
+                        save_action,
+                        obs[obs_index].flatten()[: train_agent.n_observations],
+                        save_reward
+                    ),
+                    int_frames[:, : train_agent.n_observations],
+                )
+
+        # Update next state
+        if train_ego:
+            next_state, npc_state = helpers.obs_to_state(
+                obs, ego_agent, npc_agent, device
+            )
+            ego_state = ego_agent.update(ego_state, ego_action, next_state, reward, terminated)
+        else:
+            ego_state, next_state = helpers.obs_to_state(
+                obs, ego_agent, npc_agent, device
+            )
+            npc_state = npc_agent.update(npc_state, npc_action, next_state, reward, terminated)
+
+        # Populate stats
+        # The original functions used:
+        #   - populate_stats(..., ego=True) in ego_vs_npc
+        #   - populate_stats(..., ego=False) in npc_vs_ego
+        # So we simply use train_ego_flag to specify which side is "ego"
+        helpers.populate_stats(
+            info,
+            train_agent,
+            ego_state,
+            npc_state,
+            reward,
+            episode_statistics,
+            is_ego=train_ego_flag
+        )
+
+        if done:
+            # Save trajectories that end in a Crash
+            if args.save_trajectories:
+                train_agent.trajectory_store.save(episode_statistics["episode_num"])
+
+            # Logging
+            if args.track:
+                log_stats(info, episode_statistics, ego=train_ego_flag)
+
+            helpers.reset_stats(episode_statistics)
+
+            obs, info = env.reset()
+            ego_state, npc_state = helpers.obs_to_state(
+                obs, ego_agent, npc_agent, device
+            )
+
+        t_step += 1
+        if pbar is not None:
+            pbar.update(1)
+
+    if pbar is not None:
+        pbar.close()
+
+    # Save the model of whichever agent we trained
+    train_agent.save_model(path=model_path)
+
+    # Optionally, write out the stored trajectories
+    if args.save_trajectories:
+        file_path = os.path.join(
+            train_agent.trajectory_store.file_dir,
+            f"{train_agent.trajectory_store.file_interval}"
+        )
+        train_agent.trajectory_store.write(file_path, "json")
+
+    wandb.finish()
