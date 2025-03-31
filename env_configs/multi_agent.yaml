@@ -24,7 +24,7 @@ action:
     type: DiscreteMetaAction
   type: MultiAgentAction
 controlled_vehicles: 2
-duration: 100
+duration: 40
 initial_lane_id: null
 initial_speed: 20
 lanes_count: 2
@@ -34,6 +34,8 @@ observation:
   observation_config:
     type: Kinematics
     normalize: False
+    see_behind: True
+    vehicles_count: 2
   type: MultiAgentObservation
 policy_frequency: 1
 vehicles_count: 0

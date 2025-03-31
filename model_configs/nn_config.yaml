@@ -1,0 +1,8 @@
+npc:
+  hidden_layers: 2
+  hidden_layer_size: 1024
+  batch_size: 128
+ego:
+  hidden_layers: 2
+  hidden_layer_size: 1024
+  batch_size: 128
