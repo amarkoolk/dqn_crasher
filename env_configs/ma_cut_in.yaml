@@ -34,6 +34,7 @@ observation:
   observation_config:
     type: Kinematics
     normalize: False
+    see_behind: True
   type: MultiAgentObservation
 policy_frequency: 1
 vehicles_count: 0
