@@ -1,34 +1,31 @@
 import wandb
 
-def initialize_logging(args, ego_version = None, npc_version = None, train_ego = None, eval = False, npc_pool_size = None, ego_pool_size = None, sampling = None):
+def initialize_logging(config, train_ego = None, eval = False, npc_pool_size = None, ego_pool_size = None):
     if wandb.run is not None:
         wandb.finish()
 
+    gym_config = config.get("gym_config", {})
 
     run_config ={
-                "learning_rate": args.learning_rate,
-                "architecture": args.model_type,
-                "max_duration": args.max_duration,
+                "learning_rate": config.get('learning_rate', 5e-4),
+                "architecture": config.get('architecture', 'DQN'),
                 "dataset": "Highway-Env",
-                "max_steps": args.total_timesteps,
-                "collision_reward": args.crash_reward,
-                "ttc_x_reward": args.ttc_x_reward,
-                "ttc_y_reward": args.ttc_y_reward,
-                "batch_size": args.batch_size,
-                "gamma": args.gamma,
-                "eps_start": args.start_e,
-                "eps_end": args.end_e,
-                "eps_decay": args.decay_e,
-                "tau": args.tau,
-                "ReplayBuffer": args.buffer_type,
-                "eval": eval,
-                "adjustable_k": args.adjustable_k
+                "max_steps": config.get('total_timesteps', 100000),
+                "collision_reward": gym_config.get('collision_reward', 400),
+                "ttc_x_reward": gym_config.get('ttc_x_reward', 4),
+                "ttc_y_reward": gym_config.get('ttc_y_reward', 1),
+                "batch_size": config.get('batch_size', 32),
+                "gamma": config.get('gamma', 0.8),
+                "eps_start": config.get('start_e', 1.0),
+                "eps_end": config.get('end_e', 0.05),
+                "eps_decay": config.get('decay_e', 6000),
+                "tau": config.get('tau', 0.005),
+                "ReplayBuffer": config.get('buffer_type', 'ER'),
+                "eval": eval
     }
 
-    if ego_version is not None:
-        run_config['ego_version'] = ego_version
-    if npc_version is not None:
-        run_config['npc_version'] = npc_version
+    run_config['ego_version'] = config.get('ego_version', 0)
+    run_config['npc_version'] = config.get('npc_version', 0)
     if train_ego is not None:
         run_config['train_ego'] = train_ego
     if npc_pool_size is not None:
@@ -42,18 +39,15 @@ def initialize_logging(args, ego_version = None, npc_version = None, train_ego =
     else:
         run_config['ego_pool'] = False
 
-    if sampling is not None:
-        run_config['model_sampling'] = sampling
-
-    if args.wandb_tag is not None:
-        tags = args.wandb_tag.split(',')
+    if config.get('wandb_tag', None) is not None:
+        tags = config.get('wandb_tag').split(',')
     else:
         tags = []
     
         
     run = wandb.init(
             # set the wandb project where this run will be logged
-            project=args.wandb_project_name,
+            project=config.get('wandb_project_name', 'safetyh'),
             
             # track hyperparameters and run metadata
             config=run_config,

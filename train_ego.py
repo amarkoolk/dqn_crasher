@@ -26,8 +26,7 @@ from create_env import make_env, make_vector_env
 import highway_env
 
 import tyro
-from arguments import Args
-
+from arguments import Args                                                                                                                                                                                                                                                                                                                                                               
 
 if __name__ == "__main__":
 

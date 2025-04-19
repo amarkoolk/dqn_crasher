@@ -1,0 +1,87 @@
+import gymnasium as gym
+from gymnasium.vector import AsyncVectorEnv
+import numpy as np
+from scenarios import Slowdown, SlowdownSameLane, SpeedUp, CutIn, IdleSlower, IdleFaster
+from config import load_config
+import torch
+import tyro
+from tqdm import tqdm
+from arguments import Args
+from dqn_agent import DQN_Agent
+from create_env import make_vector_env
+import json
+from helpers import obs_to_state
+
+import highway_env
+
+if __name__ == "__main__":
+
+  args = tyro.cli(Args)
+  if args.cuda:
+      device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+  elif args.metal:
+      device = torch.device(
+          "mps" if torch.backends.mps.is_available() else "cpu")
+  else:
+      device = torch.device("cpu")
+
+  scenarios = [IdleSlower(), SlowdownSameLane(), IdleFaster(), CutIn()]
+#   scenarios = [CutIn()]#, SlowdownSameLane(), SpeedUp(), CutIn()]
+
+  config = load_config("model_configs/training_config.yaml")
+  gym_config = load_config("env_configs/multi_agent.yaml")
+  gym_config['observation']['observation_config']['frame_stack'] = args.frame_stack
+  
+
+  vs_mobil = True
+  gym_config['vs_mobil'] = vs_mobil
+
+  for scenario in tqdm(scenarios):
+    scenario.set_config(gym_config)
+    gym_config['initial_speed'] = 20
+    if vs_mobil:
+        gym_config['controlled_vehicles'] = 1
+        gym_config['other_vehicles'] = 1
+    
+    env = gym.make('crash-v0', config=gym_config, render_mode='rgb_array')
+       
+
+    ego_model0 = "E0_MOBIL.pth"
+
+    action_space = env.action_space[0]
+    n_actions = action_space.n
+    n_obs = 10 * args.frame_stack
+
+    ego_agent = DQN_Agent(n_obs, n_actions, action_space, config, device)
+    ego_agent.load_model(path = ego_model0)
+
+    for _ in tqdm(range(3), leave=False):
+        done = truncated = False
+        obs, info = env.reset()
+        if vs_mobil:
+            npc_state, ego_state  = obs_to_state(obs, ego_agent, ego_agent, device)
+        else:
+            ego_state, npc_state  = obs_to_state(obs, ego_agent, ego_agent, device)
+        scenario.reset(ego_state, npc_state, info)
+        while not (done or truncated):# or scenario.end_frames > 15):
+            action = scenario.get_action()
+            npc_action = torch.squeeze(torch.tensor([action])).view(1,1).cpu().numpy()
+            ego_action = torch.squeeze(ego_agent.predict(ego_state)).view(1,1).cpu().numpy()
+            # ego_action = env.action_space.sample()[0]
+            if vs_mobil:
+                obs, reward, terminated, truncated, info = env.step((npc_action,npc_action))
+            else:
+                obs, reward, terminated, truncated, info = env.step((ego_action,npc_action))
+
+            done = terminated or truncated
+
+            if vs_mobil:
+                npc_state, ego_state  = obs_to_state(obs, ego_agent, ego_agent, device)
+            else:
+                ego_state, npc_state  = obs_to_state(obs, ego_agent, ego_agent, device)
+
+            scenario.set_state(ego_state[0,1], ego_state[0,2], npc_state[0,1], npc_state[0,2])
+            env.render()
+
+env.close()
+

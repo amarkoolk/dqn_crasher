@@ -178,7 +178,7 @@ class DQN(nn.Module):
     
 class DQN_Agent(object):
 
-    def __init__(self, n_state, n_action, action_space, args, device = 'cpu', save_trajectories = False, trajectory_path = 'trajectories', cycle = 0, ego_or_npc = 'EGO', override_obs = -1):
+    def __init__(self, n_state, n_action, action_space, config, device = 'cpu', trajectory_path = 'trajectories', cycle = 0, ego_or_npc = 'EGO', override_obs = -1):
 
         # BATCH_SIZE is the number of transitions sampled from the replay buffer
         # GAMMA is the discount factor as mentioned in the previous section
@@ -188,17 +188,19 @@ class DQN_Agent(object):
         # TAU is the update rate of the target network
         # LR is the learning rate of the ``AdamW`` optimizer
 
-        self.batch_size = args.batch_size
-        self.gamma = args.gamma
-        self.start_e = args.start_e
-        self.end_e = args.end_e
-        self.decay_e = args.decay_e
-        self.tau = args.tau
-        self.lr = args.learning_rate
+        # Set Seed
+        random.seed(config.get('seed', 42))
 
-        self.num_envs = args.num_envs
+        self.batch_size = config.get('batch_size', 32)
+        self.gamma = config.get('gamma', 0.8)  # discount factor
+        self.start_e = config.get('start_e', 1.0)  # initial epsilon
+        self.end_e = config.get('end_e', 0.05)  # final epsilon
+        self.decay_e = config.get('decay_e', 6000)  # decay period for epsilon
+        self.tau = config.get('tau', 0.005)  # target network update rate
+        self.lr = config.get('learning_rate', 5e-4)  # learning rate for the optimizer
+
         self.device = device
-        self.track = args.track
+        self.track = config.get('track', False)  # whether to track the training progress
         self.eps_threshold = 1.0
 
         self.cycle = cycle
@@ -210,21 +212,20 @@ class DQN_Agent(object):
         if override_obs != -1:
             self.n_observations = override_obs
 
-        self.policy_net = DQN(self.n_observations, self.n_actions, num_hidden_layers=args.num_hidden_layers, hidden_layer=args.hidden_layer).to(device)
-        self.target_net = DQN(self.n_observations, self.n_actions, num_hidden_layers=args.num_hidden_layers, hidden_layer=args.hidden_layer).to(device)
+        self.policy_net = DQN(self.n_observations, self.n_actions, num_hidden_layers=config.get('num_hidden_layers', 1), hidden_layer=config.get('hidden_layer', 256)).to(device)
+        self.target_net = DQN(self.n_observations, self.n_actions, num_hidden_layers=config.get('num_hidden_layers', 1), hidden_layer=config.get('hidden_layer', 256)).to(device)
 
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
 
         self.optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr)
 
-        if args.buffer_type == "ER":
-            self.memory = ReplayMemory(args.buffer_size)
-        elif args.buffer_type == "PER":
-            self.memory = PrioritizedExperienceReplay(args.buffer_size)
+        if config.get('buffer_type', 'ER') == "ER":
+            self.memory = ReplayMemory(config.get('buffer_size', 15000))
+        elif config.get('buffer_type', 'ER') == "PER":
+            self.memory = PrioritizedExperienceReplay(config.get('buffer_size', 15000))
 
-        self.save_trajectories = save_trajectories
-        if save_trajectories:
+        if config.get('save_trajectories', False):
             self.trajectory_store = TrajectoryStore(episode_interval = 1000, file_dir = trajectory_path, ego_or_npc = ego_or_npc)
 
 
@@ -237,7 +238,6 @@ class DQN_Agent(object):
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
-            # return self.policy_net(state).max(1)[1].view(self.num_envs, 1)
             return self.predict(state)
         else:
 
@@ -308,10 +308,7 @@ class DQN_Agent(object):
 
     @torch.no_grad
     def predict(self, state):
-        if self.num_envs == 1:
-            return torch.argmax(self.policy_net(state))
-        else:
-            return self.policy_net(state).max(1)[1].view(self.num_envs, 1)
+        return torch.argmax(self.policy_net(state))
         
     def update(self, state, action, next_state, reward, terminated):
 
