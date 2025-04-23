@@ -10,7 +10,7 @@ from arguments import Args
 from dqn_agent import DQN_Agent
 from create_env import make_vector_env
 import json
-from helpers import obs_to_state
+from helpers import unpack_states, make_step_actions
 
 import highway_env
 
@@ -25,8 +25,8 @@ if __name__ == "__main__":
   else:
       device = torch.device("cpu")
 
-  scenarios = [IdleSlower(), SlowdownSameLane(), IdleFaster(), CutIn()]
-#   scenarios = [CutIn()]#, SlowdownSameLane(), SpeedUp(), CutIn()]
+#   scenarios = [IdleSlower(), SlowdownSameLane(), IdleFaster(), CutIn()]
+  scenarios = [CutIn()]#, SlowdownSameLane(), SpeedUp(), CutIn()]
 
   config = load_config("model_configs/training_config.yaml")
   gym_config = load_config("env_configs/multi_agent.yaml")
@@ -58,27 +58,18 @@ if __name__ == "__main__":
     for _ in tqdm(range(3), leave=False):
         done = truncated = False
         obs, info = env.reset()
-        if vs_mobil:
-            npc_state, ego_state  = obs_to_state(obs, ego_agent, ego_agent, device)
-        else:
-            ego_state, npc_state  = obs_to_state(obs, ego_agent, ego_agent, device)
+        ego_state, npc_state = unpack_states(obs, ego_agent, device, vs_mobil)
         scenario.reset(ego_state, npc_state, info)
         while not (done or truncated):# or scenario.end_frames > 15):
             action = scenario.get_action()
             npc_action = torch.squeeze(torch.tensor([action])).view(1,1).cpu().numpy()
             ego_action = torch.squeeze(ego_agent.predict(ego_state)).view(1,1).cpu().numpy()
-            # ego_action = env.action_space.sample()[0]
-            if vs_mobil:
-                obs, reward, terminated, truncated, info = env.step((npc_action,npc_action))
-            else:
-                obs, reward, terminated, truncated, info = env.step((ego_action,npc_action))
-
+            actions = make_step_actions(ego_action, npc_action, vs_mobil)
+            obs, reward, terminated, truncated, info = env.step(actions)
             done = terminated or truncated
 
-            if vs_mobil:
-                npc_state, ego_state  = obs_to_state(obs, ego_agent, ego_agent, device)
-            else:
-                ego_state, npc_state  = obs_to_state(obs, ego_agent, ego_agent, device)
+            
+            ego_state, npc_state = unpack_states(obs, ego_agent, device, vs_mobil)
 
             scenario.set_state(ego_state[0,1], ego_state[0,2], npc_state[0,1], npc_state[0,2])
             env.render()

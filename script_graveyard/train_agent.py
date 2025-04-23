@@ -15,14 +15,18 @@ import time
 
 import highway_env
 
+class DeviceHelper:
+    @staticmethod
+    def get(config):
+        if config["device"] == "cuda":
+            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if config["device"] == "mps":
+            return torch.device("mps"  if torch.backends.mps.is_available() else "cpu")
+        return torch.device("cpu")
+
 def train_agent(config: dict):
 
-    if config['device'] == 'cuda':
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    elif config['device'] == 'mps':
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    else:
-        device = torch.device("cpu")
+    device = DeviceHelper.get(config)
 
     gym_config = config.get("gym_config", {})
     gym_config['observation']['observation_config']['frame_stack'] = config.get('frame_stack', 1)
@@ -59,13 +63,7 @@ def test_scenarios(
         use_pbar: Whether to display a progress bar.
     """
 
-    if config['device'] == 'cuda':
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    elif config['device'] == 'mps':
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    else:
-        device = torch.device("cpu")
-
+    device = DeviceHelper.get(config)
 
     total_episodes = config.get('total_episodes', 5)
 
@@ -87,10 +85,10 @@ def test_scenarios(
     action_space = env.action_space[0]
     n_actions = action_space.n
     n_obs = 10 * config.get('frame_stack', 1)
+    vs_mobil = gym_config.get('vs_mobil', False)
 
-    if config.get('use_mobil', False):
-        ego_agent = DQN_Agent(n_obs, n_actions, action_space, config, device)
-        ego_agent.load_model(config['ego_model'])
+    ego_agent = DQN_Agent(n_obs, n_actions, action_space, config, device)
+    ego_agent.load_model(config['ego_model'])
     
 
     for scenario in scenarios:
@@ -111,7 +109,7 @@ def test_scenarios(
             )
 
         obs, info = env.reset()
-        ego_state, npc_state = helpers.obs_to_state(obs, ego_agent, ego_agent, device)
+        ego_state, npc_state = helpers.unpack_states(obs, ego_agent, device, vs_mobil)
 
 
         # Main loop
@@ -121,24 +119,27 @@ def test_scenarios(
             episode_statistics = helpers.initialize_stats()
 
             obs, info = env.reset()
-            ego_state, npc_state = helpers.obs_to_state(obs, ego_agent, ego_agent, device)
+            ego_state, npc_state = helpers.unpack_states(obs, ego_agent, device, vs_mobil)
             scenario.reset(ego_state, npc_state, info)
 
             while not (done or truncated):
 
                 action = scenario.get_action()
                 npc_action = torch.squeeze(torch.tensor([action])).view(1, 1).cpu().numpy()
-                ego_action = torch.squeeze(ego_agent.predict(ego_state)).view(1, 1).cpu().numpy()
+                if vs_mobil is False:
+                    ego_action = torch.squeeze(ego_agent.predict(ego_state)).view(1, 1).cpu().numpy()
+                else:
+                    ego_action = npc_action
+                actions = helpers.make_step_actions(ego_action, npc_action, vs_mobil)
 
                 obs, reward, terminated, truncated, info = env.step(
-                    (ego_action, npc_action)
+                    actions
                 )
+
 
                 done = terminated or truncated
 
-                ego_state, npc_state = helpers.obs_to_state(
-                    obs, ego_agent, ego_agent, device
-                )
+                ego_state, npc_state = helpers.unpack_states(obs, ego_agent, device, vs_mobil)
 
                 scenario.set_state(
                     ego_state[0, 1], ego_state[0, 2],
@@ -177,13 +178,7 @@ def train_scenarios(
         use_pbar: Whether to display a progress bar.
     """
 
-    if config['device'] == 'cuda':
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    elif config['device'] == 'mps':
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    else:
-        device = torch.device("cpu")
-
+    device = DeviceHelper.get(config)
 
     total_timesteps = config.get('total_timesteps', 100000)
     if use_pbar:
@@ -254,6 +249,8 @@ def train_scenarios(
             (ego_action.cpu().numpy(), npc_action.cpu().numpy())
         )
 
+        env.render()
+
         reward = torch.tensor(reward, dtype=torch.float32, device=device)
         done = terminated or truncated
         int_frames = info['int_frames']
@@ -316,14 +313,7 @@ def train_vs_mobil(
         device: Torch device.
         use_pbar: Whether to display a progress bar.
     """
-
-    if config['device'] == 'cuda':
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    elif config['device'] == 'mps':
-        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
-    else:
-        device = torch.device("cpu")
-
+    device = DeviceHelper.get(config)
 
     total_timesteps = config.get('total_timesteps', 100000)
     if use_pbar:

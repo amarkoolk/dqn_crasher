@@ -36,7 +36,7 @@ def populate_stats(info, agent, ego_state, npc_state, reward, episode_statistics
     episode_statistics['episode_rewards'] += reward
     episode_statistics['episode_duration'] += 1
     episode_statistics['ego_speed'] += ego_state[0,3].cpu().numpy()
-    episode_statistics['npc_speed'] += npc_state[0,3].cpu().numpy() + npc_state[0,8].cpu().numpy()
+    episode_statistics['npc_speed'] += npc_state[0,3].cpu().numpy()
     if is_ego:
         episode_statistics['right_lane_reward'] += info['rewards']['right_lane_reward']
         episode_statistics['high_speed_reward'] += info['rewards']['high_speed_reward']
@@ -44,7 +44,8 @@ def populate_stats(info, agent, ego_state, npc_state, reward, episode_statistics
         episode_statistics['ttc_x_reward'] += info['rewards']['ttc_x_reward']
         episode_statistics['ttc_y_reward'] += info['rewards']['ttc_y_reward']
     episode_statistics['collision_reward'] += info['rewards']['collision_reward']
-    episode_statistics['epsilon'] = agent.eps_threshold
+    if agent is not None:
+        episode_statistics['epsilon'] = agent.eps_threshold
 
 def reset_stats(stats: dict):
     stats["episode_rewards"] = 0
@@ -59,23 +60,40 @@ def reset_stats(stats: dict):
 
     stats['episode_num'] += 1
 
-def obs_to_state(obs, ego_agent, npc_agent, device):
+def obs_to_state(obs, n_observations, device):
+
+    print(f"Obs: {obs}")
     if(len(obs) == 2):
         flattened_ego_obs = obs[0].flatten()
-        ego_obs = flattened_ego_obs[:ego_agent.n_observations]
+        ego_obs = flattened_ego_obs[:n_observations]
         ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
         flattened_npc_obs = obs[1].flatten()
-        npc_obs = flattened_npc_obs[:npc_agent.n_observations]
+        npc_obs = flattened_npc_obs[:n_observations]
         npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
     elif(len(obs) == 1):
         flattened_ego_obs = obs[0].flatten()
-        ego_obs = flattened_ego_obs[:ego_agent.n_observations]
+        ego_obs = flattened_ego_obs[:n_observations]
         ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
         npc_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
         npc_state[0, 0] = 1.0
-        npc_state[0, 1] = ego_state[0, 1] + ego_state[0, 6]
-        npc_state[0, 2] = ego_state[0, 2] + ego_state[0, 7]
-        npc_state[0, 3] = ego_state[0, 3] + ego_state[0, 8]
-        npc_state[0, 4] = ego_state[0, 4] + ego_state[0, 9]
+        npc_state[0, 1] = ego_state[0, 6]
+        npc_state[0, 2] = ego_state[0, 7]
+        npc_state[0, 3] = ego_state[0, 8]
+        npc_state[0, 4] = ego_state[0, 9]
+        npc_state[0, 5] = ego_state[0, 0]
+        npc_state[0, 6] = ego_state[0, 1]
+        npc_state[0, 7] = ego_state[0, 2]
+        npc_state[0, 8] = ego_state[0, 3]
+        npc_state[0, 9] = ego_state[0, 4]
+
+    print(f"Ego State: {ego_state}")
+    print(f"NPC State: {npc_state}")
+
 
     return ego_state, npc_state
+
+def make_step_actions(ego_action, npc_action, vs_mobil=False):
+    # if we’re “versus MOBIL” then MOBIL is our ego, 
+    # so we send (npc, npc)
+    return (npc_action, npc_action) if vs_mobil else (ego_action, npc_action)
+

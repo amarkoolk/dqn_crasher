@@ -2,154 +2,11 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
-
-import os
 import random
-import json
 import math
 import numpy as np
-from typing import TypeAlias, List, Tuple
-from collections import namedtuple
-
 from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 
-from tqdm import tqdm
-import wandb
-
-import matplotlib.pyplot as plt
-
-
-class TrajectoryStore(object):
-    def __init__(self, episode_interval : int = 5000, file_dir : str = 'trajectories', ego_or_npc = 'EGO'):
-        self.trajectories = {}
-        self.trajectories = None
-
-        self.episode_interval = episode_interval
-        self.file_interval = 0
-
-        self.file_dir = os.path.join(file_dir, ego_or_npc)
-        
-        if not os.path.exists(self.file_dir):
-            os.makedirs(self.file_dir)
-
-        self.crash_trajectories = {}
-
-    def add(self, transition: Transition, int_frames: np.ndarray, ego_pool = None, npc_pool = None):
-
-        state_history = np.vstack((transition.state, int_frames[:-1,:]))
-
-        # TTC Calculation
-        epsilon = 1e-6
-        dx = state_history[:,6]
-        dy = state_history[:,7]
-        dvx = state_history[:,8]
-        dvy = state_history[:,9]
-        ttc_x = np.divide(dx, dvx, out=np.full_like(dx, np.nan), where=(np.abs(dvx) > epsilon))
-        ttc_y = np.divide(dy, dvy, out=np.full_like(dy, np.nan), where=(np.abs(dvy) > epsilon))
-
-        small_mask = np.abs(dvx) <= epsilon
-        ttc_x[small_mask] = dx[small_mask] / epsilon
-        ttc_y[small_mask] = dy[small_mask] / epsilon
-
-
-        # Populate Actions
-        action_array = np.zeros(state_history.shape[0], dtype=int)
-        action_array[0] = transition.action
-        action_array[1:] = -1
-
-        # Populate Rewards
-        reward_array = np.zeros(state_history.shape[0], dtype=float)
-        reward_array[0] = transition.reward
-        reward_array[1:] = 0.0
-
-        # Save Model Pool Data
-        if ego_pool is not None:
-            model_idx = ego_pool.model_idx
-            ego_pool_data = np.zeros((state_history.shape[0], 5))
-            ego_pool_data[0,0] = ego_pool.model_ep_freq[model_idx]
-            ego_pool_data[0,1] = ego_pool.model_crash_freq[model_idx]
-            ego_pool_data[0,2] = ego_pool.model_sr100[model_idx]
-            ego_pool_data[0,3] = ego_pool.model_elo[model_idx]
-            ego_pool_data[0,4] = ego_pool.opponent_elo
-            ego_pool_data[1:,0] = -1
-            ego_pool_data[1:,1] = -1
-            ego_pool_data[1:,2] = -1
-            ego_pool_data[1:,3] = -1
-            ego_pool_data[1:,4] = -1
-            state_history = np.column_stack((state_history, ego_pool_data))
-        elif npc_pool is not None:
-            model_idx = npc_pool.model_idx
-            npc_pool_data = np.zeros((state_history.shape[0], 5))
-            npc_pool_data[0,0] = npc_pool.model_ep_freq[model_idx]
-            npc_pool_data[0,1] = npc_pool.model_crash_freq[model_idx]
-            npc_pool_data[0,2] = npc_pool.model_sr100[model_idx]
-            npc_pool_data[0,3] = npc_pool.model_elo[model_idx]
-            npc_pool_data[0,4] = npc_pool.opponent_elo
-            npc_pool_data[1:,0] = -1
-            npc_pool_data[1:,1] = -1
-            npc_pool_data[1:,2] = -1
-            npc_pool_data[1:,3] = -1
-            npc_pool_data[1:,4] = -1
-            state_history = np.column_stack((state_history, npc_pool_data))
-
-        save_data = np.column_stack((state_history, action_array, reward_array, ttc_x, ttc_y))
-
-        if self.trajectories is None:
-            self.trajectories = save_data
-        else:
-            self.trajectories= np.vstack((self.trajectories, save_data))
-
-    def clear(self):
-        self.trajectories = None
-
-    def save(self, episode_num: int):
-        self.crash_trajectories[episode_num] = self.trajectories.tolist()
-        self.clear()
-
-        if len(self.crash_trajectories.keys()) % self.episode_interval == 0:
-            file_path = os.path.join(self.file_dir, f'{self.file_interval}')
-            self.write(file_path, 'json')
-            self.file_interval += 1
-            self.crash_trajectories = {}
-
-    def trajectory_to_dict(self, trajectory) -> dict:
-        trajectory_dict = {}
-        for episode, transition in enumerate(trajectory):
-            trajectory_dict[episode] = self.transition_to_dict(transition)
-
-        return trajectory_dict
-
-    def transition_to_dict(self, transition: Transition) -> dict:
-        if transition.next_state is None:
-            return {
-                "state": transition.state.tolist(),
-                "action": int(transition.action),
-                "next_state": None,
-                "reward": float(transition.reward)
-            }
-        else:
-            return {
-                "state": transition.state.tolist(),
-                "action": int(transition.action),
-                "next_state": transition.next_state.tolist(),
-                "reward": float(transition.reward)
-            }
-
-    def write(self, path: str, type: str):
-        path_name = path + '.' + type
-        if type == "csv":
-            with open(path_name, 'w') as f:
-                for episode in self.crash_trajectories.keys():
-                    f.write(f'Episode: {episode}\n')
-                    for transition in self.crash_trajectories[episode]:
-                        f.write(f'{transition.state},{transition.action},{transition.next_state},{transition.reward}\n')
-
-        elif type == "json":
-            with open(path_name, 'w') as f:
-
-                json.dump(self.crash_trajectories, f, indent = 6)
-
-        print(f'Collision Trajectories saved to {path_name}')
         
 
 class DQN(nn.Module):
@@ -224,9 +81,6 @@ class DQN_Agent(object):
             self.memory = ReplayMemory(config.get('buffer_size', 15000))
         elif config.get('buffer_type', 'ER') == "PER":
             self.memory = PrioritizedExperienceReplay(config.get('buffer_size', 15000))
-
-        if config.get('save_trajectories', False):
-            self.trajectory_store = TrajectoryStore(episode_interval = 1000, file_dir = trajectory_path, ego_or_npc = ego_or_npc)
 
 
     def select_action(self, state, steps_done):

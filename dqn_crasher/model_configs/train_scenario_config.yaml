@@ -1,0 +1,59 @@
+seed: 42
+
+env_name: 'crash-v0'
+architecture: 'DQN'
+track: True
+device: 'cpu'
+ego_model: './models/model.pth'
+
+frame_stack: 1
+use_mobil: False
+render: True
+
+scenarios:
+  # - 'scenarios.IdleSlower'
+  # - 'scenarios.IdleFaster'
+  - 'scenarios.CutIn'
+
+# NN
+batch_size: 32
+gamma: 0.8
+start_e: 1.0
+end_e: 0.05
+decay_e: 6000
+tau: 0.005
+lr: 0.0005
+buffer_size: 15000
+buffer_type: 'ER'
+num_hidden_layers: 1
+hidden_layer: 256
+
+
+total_episodes: 200
+total_timesteps: 10000
+
+save_trajectories: True
+trajectory_path: "./trajectories/all_episodes.jsonl"
+model_save_path: "./models/model.pth"
+
+# curriculum.yaml
+training_distribution:
+  # for episodes 0–999, 80% Scenario, 20% MOBIL
+  - from: 0
+    to:   999
+    opponents:
+      ScenarioPolicy: 0.8
+      MobilPolicy:   0.2
+
+  # for episodes 1000–1999, 50% each Scenario and DQN
+  - from: 1000
+    to:   1999
+    opponents:
+      ScenarioPolicy: 0.5
+      DQNPolicy:      0.5
+
+  # 2000+ train only against DQN self‐play
+  - from: 2000
+    to:   null
+    opponents:
+      DQNPolicy:      1.0

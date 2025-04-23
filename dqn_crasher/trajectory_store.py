@@ -1,0 +1,83 @@
+import os
+import json
+from buffers import Transition
+
+class TrajectoryStore(object):
+
+    def __init__(self, file_path: str = "trajectories/all_episodes.jsonl"):
+        # Holds completed episodes: { episode_idx: [ {state,action,next_state,reward}, … ] }
+        self.episodes = {}
+        self.current_episode = None
+
+        dirpath = os.path.dirname(file_path)
+        if dirpath:
+            os.makedirs(dirpath, exist_ok=True)
+        
+        self.file_path = file_path
+
+
+    def start_episode(self, episode_idx: int):
+        """Begin collecting a fresh list of transitions."""
+        self.current_episode = episode_idx
+        self.episodes[episode_idx] = []
+
+    def add(self, transition: Transition):
+        """
+        Append a single Transition(state, action, next_state, reward) to the current episode.
+        """
+        if self.current_episode is None:
+            raise RuntimeError("call start_episode() before add()")
+        
+        # Convert numpy arrays to lists, ints/floats to native types
+        entry = {
+            "state":      transition.state.tolist(),
+            "action":     int(transition.action),
+            "next_state": None if transition.next_state is None else transition.next_state.tolist(),
+            "reward":     float(transition.reward),
+        }
+        self.episodes[self.current_episode].append(entry)
+
+    def end_episode(self):
+        """
+        Write the just‑finished episode as one JSON line,
+        then clear it from memory.
+        """
+        ep = self.current_episode
+        if ep is None:
+            return
+
+        record = {
+            "episode": ep,
+            "transitions": self.episodes.pop(ep)
+        }
+
+        # Append one JSON object per line
+        with open(self.file_path, "a") as f:
+            json.dump(record, f)
+            f.write("\n")
+
+        self.current_episode = None
+
+    def load(self, file_path: str = None):
+        """
+        Load all episodes from a JSONL file into self.episodes.
+        Any existing episodes in memory will be replaced.
+        """
+        path = file_path or self.file_path
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"No such file: {path}")
+
+        loaded = {}
+        with open(path, "r") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                record = json.loads(line)
+                ep_idx = record.get("episode")
+                transitions = record.get("transitions", [])
+                loaded[ep_idx] = transitions
+
+        self.episodes = loaded
+        print(f"Loaded {len(loaded)} episodes from {path}")
+        return self.episodes

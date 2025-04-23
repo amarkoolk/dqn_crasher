@@ -35,6 +35,7 @@ observation:
     type: Kinematics
     normalize: False
     see_behind: True
+    absolute: True
     vehicles_count: 2
   type: MultiAgentObservation
 policy_frequency: 1
