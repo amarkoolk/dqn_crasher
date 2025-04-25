@@ -3,7 +3,7 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '.')))
 
 import torch
-from policies    import DQNPolicy, ScenarioPolicy, MobilPolicy
+from policies    import DQNPolicy, ScenarioPolicy, MobilPolicy, PolicyDistribution
 from runner      import MultiAgentRunner
 from dqn_agent   import DQN_Agent
 from config      import load_config
@@ -34,12 +34,14 @@ def make_players(cfg, gym_config, device):
     npc_agent.load_model(cfg.get("npc_model", None))
 
     # wrap them
-    p_ego = DQNPolicy(ego_agent, cfg.get('trajectory_path', 'trajectories'))
-    p_npc = DQNPolicy(npc_agent, cfg.get('trajectory_path', 'trajectories'))
+    p_ego = DQNPolicy(ego_agent, cfg.get('trajectory_path', 'trajectories'), cfg.get('train_ego', False))
+    p_npc = DQNPolicy(npc_agent, cfg.get('trajectory_path', 'trajectories'), not cfg.get('train_npc', False))
 
     # scenario wrapper
-    scen_cls_list = [scenarios.CutInSlowDown]
-    p_scen = ScenarioPolicy(scen_cls_list, cfg["gym_config"], n_obs, cfg.get('trajectory_path', 'trajectories'))
+    cutin_scen = ScenarioPolicy(scenarios.CutIn, n_obs, cfg.get('trajectory_path', 'trajectories'))
+    slowdown_scen = ScenarioPolicy(scenarios.IdleSlower, n_obs, cfg.get('trajectory_path', 'trajectories'))
+    p_scen = PolicyDistribution([cutin_scen, slowdown_scen])
+
     p_mobil = MobilPolicy(cfg.get('trajectory_path', 'trajectories'))
 
     return p_ego, p_npc, p_scen, p_mobil

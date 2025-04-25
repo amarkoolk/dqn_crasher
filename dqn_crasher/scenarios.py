@@ -15,16 +15,14 @@ class Scenario:
         self.prev_action = Action.IDLE.value
         self.spawn_configs = []
 
-    def set_state(self, ego_x: float, ego_y: float, npc_x: float, npc_y: float):
-        """
-        Common method to set the positions of the ego and npc vehicles.
-        """
-        self.ego_x = ego_x
-        self.ego_y = ego_y
-        self.npc_x = npc_x
-        self.npc_y = npc_y
+    def set_state(self, ego_state: np.ndarray, npc_state: np.ndarray):
 
-    def reset(self, ego_state: np.ndarray, npc_state: np.ndarray, info: dict):
+        self.ego_x = ego_state[0, 1]
+        self.ego_y = ego_state[0, 2]
+        self.npc_x = npc_state[0, 1]
+        self.npc_y = npc_state[0, 2]
+
+    def reset(self):
         """
         Common reset logic across all scenarios.
         """
@@ -32,16 +30,12 @@ class Scenario:
         self.end_frames = 0
         self.prev_action = Action.IDLE.value
 
-        # Set positions using the common set_state method
-        self.set_state(ego_state[0, 1], ego_state[0, 2],
-                       npc_state[0, 1], npc_state[0, 2])
-
     def get_action(self):
         """
         Should be overridden by each scenario with scenario-specific logic.
         """
         raise NotImplementedError
-    
+
     def set_config(self, config: dict):
         """
         Set the configuration for the scenario.
@@ -58,7 +52,7 @@ class IdleSlower(Scenario):
 
     def get_action(self):
         return Action.IDLE.value
-    
+
     def set_config(self, config: dict):
         """
         Set the configuration for the scenario.
@@ -74,7 +68,7 @@ class IdleFaster(Scenario):
 
     def get_action(self):
         return Action.IDLE.value
-    
+
     def set_config(self, config: dict):
         """
         Set the configuration for the scenario.
@@ -90,7 +84,7 @@ class Slowdown(Scenario):
 
     def get_action(self):
         return Action.SLOWER.value
-    
+
     def set_config(self, config: dict):
         """
         Set the configuration for the scenario.
@@ -98,10 +92,7 @@ class Slowdown(Scenario):
         config['adversarial'] = False
         config['use_spawn_distribution'] = False
         config['mean_delta_v'] = 0.0
-        if config['vs_mobil']:
-            config['spawn_configs'] = ['forward_left']
-        else:
-            config['spawn_configs'] = ['behind_right']
+        config['spawn_configs'] = ['forward_left']
 
 
 class SlowdownSameLane(Scenario):
@@ -110,7 +101,7 @@ class SlowdownSameLane(Scenario):
 
     def get_action(self):
         return Action.SLOWER.value
-    
+
     def set_config(self, config: dict):
         """
         Set the configuration for the scenario.
@@ -118,10 +109,7 @@ class SlowdownSameLane(Scenario):
         config['adversarial'] = False
         config['use_spawn_distribution'] = False
         config['mean_delta_v'] = 0.0
-        if config['vs_mobil']:
-            config['spawn_configs'] = ['forward_center']
-        else:
-            config['spawn_configs'] = ['behind_center']
+        config['spawn_configs'] = ['forward_center']
 
 
 class SpeedUp(Scenario):
@@ -130,7 +118,7 @@ class SpeedUp(Scenario):
 
     def get_action(self):
         return Action.FASTER.value
-    
+
 
     def set_config(self, config: dict):
         """
@@ -139,10 +127,7 @@ class SpeedUp(Scenario):
         config['adversarial'] = False
         config['use_spawn_distribution'] = False
         config['mean_delta_v'] = 0.0
-        if config['vs_mobil']:
-            config['spawn_configs'] = ['behind_left']
-        else:
-            config['spawn_configs'] = ['forward_right']
+        config['spawn_configs'] = ['behind_left']
 
 
 class CutIn(Scenario):
@@ -156,14 +141,14 @@ class CutIn(Scenario):
     def __init__(self):
         super().__init__()
         self.current_maneuver = self.CutInManeuver.EVADE
-        self.spawn_configs = ['behind_left', 'behind_right', 'behind_center']
+        self.spawn_configs = ['behind_left']
 
-    def reset(self, ego_state: np.ndarray, npc_state: np.ndarray, info: dict):
+    def reset(self):
         """
         Override reset if scenario-specific attributes need re-initialization.
         Still call super() for the common steps.
         """
-        super().reset(ego_state, npc_state, info)
+        super().reset()
         self.current_maneuver = self.CutInManeuver.EVADE
 
     def set_config(self, config: dict):
@@ -173,7 +158,7 @@ class CutIn(Scenario):
         config['adversarial'] = False
         config['use_spawn_distribution'] = False
         config['mean_delta_v'] = 0.0
-        config['spawn_configs'] = ['behind_left', 'behind_right', 'behind_center']
+        config['spawn_configs'] = ['behind_left']
 
     def get_action(self):
         action = self.prev_action
@@ -213,7 +198,7 @@ class CutIn(Scenario):
 
         self.prev_action = action
         return action
-    
+
 class CutInSlowDown(Scenario):
     class CutInManeuver(Enum):
         EVADE = 0
@@ -229,12 +214,12 @@ class CutInSlowDown(Scenario):
         self.prev_action = Action.IDLE.value
         self.spawn_configs = ['forward_left', 'forward_right']
 
-    def reset(self, ego_state: np.ndarray, npc_state: np.ndarray, info: dict):
+    def reset(self, ego_state: np.ndarray, npc_state: np.ndarray):
         """
         Override reset if scenario-specific attributes need re-initialization.
         Still call super() for the common steps.
         """
-        super().reset(ego_state, npc_state, info)
+        super().reset(ego_state, npc_state)
         self.counter = 0
         self.prev_action = Action.IDLE.value
         self.current_maneuver = self.CutInManeuver.EVADE
@@ -254,10 +239,6 @@ class CutInSlowDown(Scenario):
 
         dy = self.ego_y - self.npc_y
 
-        print(f"Ego Y: {self.ego_y}, NPC Y: {self.npc_y}, DY: {dy}")
-        print(self.current_maneuver)
-
-
         if self.current_maneuver == self.CutInManeuver.EVADE:
             self.counter +=1
             if self.counter > 2:
@@ -270,12 +251,9 @@ class CutInSlowDown(Scenario):
                 action = Action.LANE_LEFT.value
             # Once we do the cut-in, move to BRAKE
             self.current_maneuver = self.CutInManeuver.BRAKE
-        
+
         elif self.current_maneuver == self.CutInManeuver.BRAKE:
             action = Action.SLOWER.value
-
-        print(f"Action: {action}")
-
 
         self.prev_action = action
         return action

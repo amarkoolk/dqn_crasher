@@ -15,6 +15,8 @@ class TrajectoryStore(object):
         
         self.file_path = file_path
 
+    def set_metadata(self, metadata: dict):
+        self.metadata = metadata
 
     def start_episode(self, episode_idx: int):
         """Begin collecting a fresh list of transitions."""

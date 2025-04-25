@@ -1,4 +1,5 @@
 # runner.py
+from logging import raiseExceptions
 import os
 import gymnasium as gym
 import torch
@@ -10,13 +11,12 @@ from wandb_logging import initialize_logging, log_stats
 from dqn_agent import DQN_Agent
 import policies
 from buffers import Transition
-from training_distribution import DistributionScheduler
 
 class MultiAgentRunner:
     def __init__(self, env_name, config, gym_cfg, device, policy_a, policy_b):
         self.env_name = env_name
-        self.cfg      = config
-        self.gym_cfg  = gym_cfg
+        self.cfg : dict      = config
+        self.gym_cfg : dict  = gym_cfg
         self.dev      = device
         self.A        = policy_a
         self.B        = policy_b
@@ -38,7 +38,7 @@ class MultiAgentRunner:
             stats = helpers.initialize_stats()
 
         while t < total_timesteps:
-            steps, _ = self._run_episode(train_mode=True, train_player=train_player, t_start=t, stats=stats, pbar=pbar)
+            steps = self._run_episode(train_player=train_player, t_start=t, stats=stats, pbar=pbar)
             t += steps
 
         if train_player == "A" and type(self.A.agent) == DQN_Agent:
@@ -59,26 +59,46 @@ class MultiAgentRunner:
             stats = helpers.initialize_stats()
 
         while eps_done < total_eps:
-            _, ended = self._run_episode(train_mode=False, train_player=None, t_start=0, stats=stats, pbar=pbar)
-            eps_done += ended
+            _ = self._run_episode(train_player=None, t_start=0, stats=stats, pbar=None)
+            eps_done += 1
 
             if pbar is not None:
                 pbar.update(1)
 
-        if pbar: 
-            pbar.close()
-
+        if pbar: pbar.close()
         wandb.finish()
 
-    def _run_episode(self, train_mode, train_player, t_start, stats, pbar):
+    def _set_config(self, train_player):
+        def unwrap(policy_obj):
+            # if it's a distribution, grab the inner scenario policy
+            return policy_obj.current_policy if isinstance(policy_obj, policies.PolicyDistribution) else policy_obj
+
+        for name in ('A', 'B'):
+            policy = unwrap(getattr(self, name))
+            # ScenarioPolicy always gets configured
+            if isinstance(policy, policies.ScenarioPolicy):
+                return policy.set_config(self.gym_cfg)
+            # DQNPolicy only if it's the one we're training
+            if isinstance(policy, policies.DQNPolicy) and name == train_player:
+                return policy.set_config(self.gym_cfg)
+
+        raise Exception("Invalid Config Combination")
+
+    def _run_episode(self, train_player, t_start, stats, pbar):
         total_timesteps = self.cfg.get('total_timesteps', 100000)
+
+        # reset both policies
+        self.A.reset()
+        self.B.reset()
+
+        self._set_config(train_player)
+
         env  = gym.make(self.env_name, config=self.gym_cfg, render_mode="rgb_array")
         obs, info = env.reset()
         ego_s, npc_s = helpers.obs_to_state(obs, self.n_obs, self.dev)
 
-        # reset both policies
-        self.A.reset(ego_s, npc_s, info, train_mode)
-        self.B.reset(npc_s, ego_s, info, train_mode)  # note swapped order
+        self.A.set_state(ego_s, npc_s)
+        self.B.set_state(ego_s, npc_s)
 
         if self.cfg.get('save_trajectories', False):
             self.A.store.start_episode(stats['episode_num'])
@@ -87,18 +107,10 @@ class MultiAgentRunner:
         done  = False
         steps = 0
 
-        while not done and (not train_mode or t < total_timesteps):
-            # pick actions
-            if train_mode:
-                if train_player == "A":
-                    a_A = self.A.select_action(ego_s, npc_s, t)
-                    a_B = self.B.predict(npc_s, ego_s)
-                else:
-                    a_A = self.A.predict(ego_s, npc_s)
-                    a_B = self.B.select_action(npc_s, ego_s, t)
-            else:
-                a_A = self.A.predict(ego_s, npc_s)
-                a_B = self.B.predict(npc_s, ego_s)
+        while not done and t < total_timesteps:
+
+            a_A = self.A.select_action(ego_s, npc_s, t)
+            a_B = self.B.select_action(npc_s, ego_s, t)
 
             actions = (a_A.cpu().numpy(), a_B.cpu().numpy())
 
@@ -109,32 +121,15 @@ class MultiAgentRunner:
             if self.cfg.get('render', False):
                 env.render()
 
-            # update trainable policy
-            if train_mode:
-                if train_player == "A":
-                    next_A, next_B = helpers.obs_to_state(obs, self.n_obs, self.dev)
-                    transition = Transition(ego_s, a_A, next_A, torch.tensor(reward, device=self.dev))
-                    ego_s = self.A.update(transition, term)
+            next_A, next_B = helpers.obs_to_state(obs, self.n_obs, self.dev)
+            transition_A = Transition(ego_s, a_A, next_A, torch.tensor(reward, device=self.dev))
+            transition_B = Transition(npc_s, a_B, next_B, torch.tensor(reward, device=self.dev))
+            ego_s = self.A.update(transition_A, term)
+            npc_s = self.B.update(transition_B, term)
 
-                    transition = Transition(npc_s, a_B, next_B, torch.tensor(reward, device=self.dev))
-                    npc_s = next_B
-                    if type(self.B) == policies.ScenarioPolicy:
-                        self.B.update(transition, None)
+            self.A.set_state(ego_s, npc_s)
+            self.B.set_state(ego_s, npc_s)
 
-                else:
-                    next_A, next_B = helpers.obs_to_state(obs, self.n_obs, self.dev)
-                    transition = Transition(npc_s, a_B, next_B, torch.tensor(reward, device=self.dev))
-                    npc_s  = self.B.update(transition, term)
-                    ego_s  = next_A
-            else:
-                ego_s, npc_s = helpers.obs_to_state(obs, self.n_obs, self.dev)
-                transition_A = Transition(ego_s, a_A, ego_s, torch.tensor(reward, device=self.dev))
-                if type(self.A) == policies.ScenarioPolicy:
-                    self.A.update(transition_A, None)
-                
-                transition_B = Transition(npc_s, a_A, npc_s, torch.tensor(reward, device=self.dev))
-                if type(self.B) == policies.ScenarioPolicy:
-                    self.B.update(transition_B, None)
 
             # store trajectories for the  policy
             if self.cfg.get('save_trajectories'):
@@ -154,7 +149,7 @@ class MultiAgentRunner:
 
             t += 1
             steps += 1
-            if train_mode and pbar:
+            if pbar:
                 pbar.update(1)
 
         if self.cfg.get('track', False):
@@ -166,4 +161,4 @@ class MultiAgentRunner:
 
 
         env.close()
-        return steps, (1 if not train_mode else 0)
+        return steps

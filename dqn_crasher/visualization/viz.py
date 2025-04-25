@@ -34,7 +34,7 @@ STATE_SLICES = get_state_slices(STATE_SPEC)
 
 class TrajectoryVisualizer:
     def __init__(self, state_slices, relative_map=None, ego_size=(5,2), npc_size=(5,2),
-                 lane_markings=[(-2, 'solid'), (2, 'dashed'), (6, 'solid')]):
+                 lane_markings=[(-6, 'solid'), (-2, 'dashed'), (2, 'solid')]):
         self.slices = state_slices
         self.relative_map = relative_map or {}
         self.ego_size      = ego_size
@@ -75,7 +75,7 @@ class TrajectoryVisualizer:
         for entity, d in trajs.items():
             mask = d["presence"] > 0.5
             xs = d["x"].copy()
-            ys = d["y"].copy()
+            ys = -d["y"].copy()
             if global_frame and entity in self.relative_map:
                 parent = self.relative_map[entity]
                 xs = xs + trajs[parent]["x"]
@@ -156,7 +156,7 @@ class TrajectoryVisualizer:
             alpha = max(0.2, float(i)/N)
             # Ego
             ex = trajs["car1"]["x"][i]
-            ey = trajs["car1"]["y"][i]
+            ey = -trajs["car1"]["y"][i]
             evx= trajs["car1"]["vx"][i]
             evy= trajs["car1"]["vy"][i]
             bbox_e = self._make_bbox(ex, ey, evx, evy, self.ego_size, 'blue', alpha)
@@ -164,7 +164,7 @@ class TrajectoryVisualizer:
 
             # NPC (global)
             nx = trajs["car2"]["x"][i]
-            ny = trajs["car2"]["y"][i]
+            ny = -trajs["car2"]["y"][i]
             if global_frame and "car2" in self.relative_map:
                 parent = self.relative_map["car2"]
                 nx += trajs[parent]["x"][i]
@@ -217,12 +217,12 @@ class TrajectoryVisualizer:
 
         # Precompute positions and velocities
         ego_x = trajs["car1"]["x"]
-        ego_y = trajs["car1"]["y"]
+        ego_y = -trajs["car1"]["y"]
         ego_vx = trajs["car1"]["vx"]
         ego_vy = trajs["car1"]["vy"]
 
         npc_x = trajs["car2"]["x"].copy()
-        npc_y = trajs["car2"]["y"].copy()
+        npc_y = -trajs["car2"]["y"].copy()
         npc_vx = trajs["car2"]["vx"]
         npc_vy = trajs["car2"]["vy"]
 

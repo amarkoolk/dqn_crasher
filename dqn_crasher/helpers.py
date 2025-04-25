@@ -61,8 +61,7 @@ def reset_stats(stats: dict):
     stats['episode_num'] += 1
 
 def obs_to_state(obs, n_observations, device):
-
-    print(f"Obs: {obs}")
+    
     if(len(obs) == 2):
         flattened_ego_obs = obs[0].flatten()
         ego_obs = flattened_ego_obs[:n_observations]
@@ -85,10 +84,6 @@ def obs_to_state(obs, n_observations, device):
         npc_state[0, 7] = ego_state[0, 2]
         npc_state[0, 8] = ego_state[0, 3]
         npc_state[0, 9] = ego_state[0, 4]
-
-    print(f"Ego State: {ego_state}")
-    print(f"NPC State: {npc_state}")
-
 
     return ego_state, npc_state
 
