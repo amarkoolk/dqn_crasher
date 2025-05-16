@@ -7,16 +7,16 @@ device: "cpu"
 ego_model: "./models/train_vs_cutin.pth"
 
 policy_A:
-  - policies.DQNPolicy
-policy_B:
   - scenarios.IdleSlower
   - scenarios.IdleFaster
   - scenarios.CutIn
   - scenarios.CutInSlowDown
+policy_B:
+  - policies.MobilPolicy
 
 frame_stack: 1
-render: False
-train_ego: True
+render: True
+train_ego: False
 
 # NN
 batch_size: 32
@@ -35,5 +35,5 @@ total_episodes: 100
 total_timesteps: 100000
 
 save_trajectories: True
-trajectory_path: "./dqn_vs_scenarios/episodes"
+trajectory_path: "./mobil_vs_scenarios/episodes"
 model_save_path: "./models/train_vs_cutin.pth"

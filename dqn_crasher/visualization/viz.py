@@ -2,6 +2,7 @@ import os
 import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+import json
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -11,13 +12,7 @@ from matplotlib.animation import FuncAnimation
 
 
 
-STATE_SPEC = [
-    ("car1", ["presence", "x", "y", "vx", "vy"]),
-    ("car2", ["presence", "x", "y", "vx", "vy"]),
-]
-RELATIVE_MAP = {
-    "car2": "car1",  # car2's x,y are relative to car1's x,y
-}
+
 
 def get_state_slices(state_spec):
     """
@@ -30,77 +25,72 @@ def get_state_slices(state_spec):
         idx += len(vars)
     return slices
 
-STATE_SLICES = get_state_slices(STATE_SPEC)
 
 class TrajectoryVisualizer:
     def __init__(self, state_slices, relative_map=None, ego_size=(5,2), npc_size=(5,2),
-                 lane_markings=[(-6, 'solid'), (-2, 'dashed'), (2, 'solid')]):
+                 lane_markings=[(-6, 'solid'), (-2, 'dashed'), (2, 'solid')], entity_names=None, frame_stack=1):
         self.slices = state_slices
         self.relative_map = relative_map or {}
         self.ego_size      = ego_size
         self.npc_size      = npc_size
         self.lane_markings = lane_markings
+        self.frame_stack   = frame_stack
+        # Derive entities dynamically
+        self.entities = list(self.slices.keys())# Display names per entity
+        if entity_names is not None:
+            # Expect dict {entity_key: display_name}
+            self.display_names = entity_names
+        else:
+            self.display_names = {ent: ent for ent in self.entities}
+        # Map colors and sizes per entity (customize as needed)
+        self.color_map = {ent: ('green' if i == 0 else 'blue')
+                            for i, ent in enumerate(self.entities)}
+        self.size_map  = {ent: (ego_size if i == 0 else npc_size)
+                            for i, ent in enumerate(self.entities)}
+        self.cache = {}
+
+    def load(self, transitions):
+        data = self.extract(transitions)
+        N = data['action'].shape[0]
+        self.cache.clear()
+        self.cache['N'] = N
+        for ent in self.entities:
+            arr = data[ent]
+            x, y = arr['x'], arr['y']
+            self.cache[f'{ent}_x'] = x
+            self.cache[f'{ent}_y'] = -y
+            self.cache[f'{ent}_vx'] = arr['vx']
+            self.cache[f'{ent}_vy'] = -arr['vy']
+        self.cache['actions'] = data['action']
+        self.cache['rewards'] = data['reward']
+        return self.cache
 
     def extract(self, transitions):
-        """
-        Given a list of transition dicts, each with 'state',
-        return a nested dict:
-          { entity: { var: np.array([...]) } }
-        Automatically flattens nested lists if needed.
-        """
         raw_states = []
         for t in transitions:
-            state = np.array(t["state"])
-            # Flatten if nested: e.g., shape (1,10) -> (10,)
-            if state.ndim > 1 and state.shape[0] == 1:
-                state = state.squeeze(0)
-            raw_states.append(state)
+            # flatten *all* the nested lists into one 1D array
+            flat = np.array(t['state']).ravel()
+
+            if self.frame_stack > 1:
+                # how many numbers per frame?
+                dim = flat.size // self.frame_stack
+                # pick the most recent frame
+                s = flat[-dim:]
+            else:
+                s = flat
+
+            raw_states.append(s)
+
+        # now stack into (N, dim) as before
         states = np.stack(raw_states, axis=0)
 
         data = {}
-        for entity, idxs in self.slices.items():
-            data[entity] = {}
-            for var, idx in idxs.items():
-                data[entity][var] = states[:, idx]
+        for ent, idxs in self.slices.items():
+            data[ent] = {var: states[:, idx] for var, idx in idxs.items()}
+
+        data['action'] = np.array([t['action'] for t in transitions])
+        data['reward'] = np.array([t['reward'] for t in transitions])
         return data
-
-    def plot_episode(self, transitions, title=None, global_frame=True):
-        """
-        Plot the XY trajectories of each entity.
-        If global_frame=True, entities listed in RELATIVE_MAP
-        will be offset by their parent entity's position.
-        """
-        trajs = self.extract(transitions)
-        plt.figure()
-        for entity, d in trajs.items():
-            mask = d["presence"] > 0.5
-            xs = d["x"].copy()
-            ys = -d["y"].copy()
-            if global_frame and entity in self.relative_map:
-                parent = self.relative_map[entity]
-                xs = xs + trajs[parent]["x"]
-                ys = ys + trajs[parent]["y"]
-            plt.plot(xs[mask], ys[mask], label=entity)
-        plt.xlabel("X position")
-        plt.ylabel("Y position")
-        plt.title(title or "Episode Trajectories")
-        plt.legend()
-        plt.axis('equal')
-        plt.show()
-
-    
-
-    def plot_multiple(self, episodes, episode_indices=None, global_frame=True):
-        """
-        Plot multiple episodes in sequence.
-        episodes: dict of episode_idx -> list of transitions
-        episode_indices: list of episode indices to plot
-        """
-        if episode_indices is None:
-            episode_indices = sorted(episodes.keys())
-        for ep in episode_indices:
-            print(f"--- Episode {ep} ---")
-            self.plot_episode(episodes[ep], title=f"Episode {ep}", global_frame=global_frame)
 
     def _make_bbox(self, x, y, vx, vy, size, color, alpha):
         """
@@ -116,191 +106,282 @@ class TrajectoryVisualizer:
         anchor_x = x - length / 2
         anchor_y = y - width / 2
         return patches.Rectangle(
-            (anchor_x, anchor_y), 
+            (anchor_x, anchor_y),
             length, width,
             angle=heading,
             linewidth=1, edgecolor=color, facecolor='none', alpha=alpha
         )
 
     def plot_episode_with_bboxes(self, transitions, title=None, global_frame=True):
-        """
-        Static plot: bounding‐box history + lane lines + velocity subplot.
-        """
-        trajs = self.extract(transitions)
-        # Prepare figure
-        fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(14,6))
+        cache = self.load(transitions)
+        N = cache['N']
+        ents = self.entities
 
-        # Compute limits
-        all_x, all_y = [], []
-        for ent in trajs:
-            xs = trajs[ent]["x"]
-            ys = trajs[ent]["y"]
-            if global_frame and ent in self.relative_map:
-                parent = self.relative_map[ent]
-                xs = xs + trajs[parent]["x"]
-                ys = ys + trajs[parent]["y"]
-            all_x.append(xs)
-            all_y.append(ys)
-        all_x = np.concatenate(all_x)
-        all_y = np.concatenate(all_y)
-        x_min, x_max = np.min(all_x)-self.ego_size[0], np.max(all_x)+self.ego_size[0]
-        y_min, y_max = np.min(all_y)-self.ego_size[1], np.max(all_y)+self.ego_size[1]
+        fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6))
 
-        # 1) Draw lane markings
-        for y, style in self.lane_markings:
-            ax0.hlines(y, x_min, x_max, colors='k', linestyles=style)
-
-        # 2) Draw bounding boxes over time
-        N = len(transitions)
+        # Bounding boxes
+        all_x = np.concatenate([cache[f'{e}_x'] for e in ents])
+        all_y = np.concatenate([cache[f'{e}_y'] for e in ents])
+        x_min, x_max = all_x.min() - self.ego_size[0], all_x.max() + self.ego_size[0]
+        y_min, y_max = all_y.min() - self.ego_size[1], all_y.max() + self.ego_size[1]
+        ax0.set_xlim(x_min, x_max)
+        ax0.set_ylim(y_min, y_max)
+        for y_line, style in self.lane_markings:
+            ax0.hlines(y_line, x_min, x_max, colors='k', linestyles=style)
         for i in range(N):
-            alpha = max(0.2, float(i)/N)
-            # Ego
-            ex = trajs["car1"]["x"][i]
-            ey = -trajs["car1"]["y"][i]
-            evx= trajs["car1"]["vx"][i]
-            evy= trajs["car1"]["vy"][i]
-            bbox_e = self._make_bbox(ex, ey, evx, evy, self.ego_size, 'blue', alpha)
-            ax0.add_patch(bbox_e)
-
-            # NPC (global)
-            nx = trajs["car2"]["x"][i]
-            ny = -trajs["car2"]["y"][i]
-            if global_frame and "car2" in self.relative_map:
-                parent = self.relative_map["car2"]
-                nx += trajs[parent]["x"][i]
-                ny += trajs[parent]["y"][i]
-            nvx = trajs["car2"]["vx"][i] + evx
-            nvy = trajs["car2"]["vy"][i] + evy
-            bbox_n = self._make_bbox(nx, ny, nvx, nvy, self.npc_size, 'red', alpha)
-            ax0.add_patch(bbox_n)
-
+            alpha = max(0.2, i / N)
+            for e in ents:
+                x = cache[f'{e}_x'][i]
+                y = cache[f'{e}_y'][i]
+                vx = cache[f'{e}_vx'][i]
+                vy = cache[f'{e}_vy'][i]
+                bbox = self._make_bbox(x, y, vx, vy, self.size_map[e], self.color_map[e], alpha)
+                ax0.add_patch(bbox)
         ax0.axis('equal')
-        ax0.set_xlabel("X position")
-        ax0.set_ylabel("Y position")
-        ax0.set_title(title or "Bounding Box Trajectories")
+        ax0.set_xlabel('X position')
+        ax0.set_ylabel('Y position')
+        ax0.set_title(title or 'Bounding Box Trajectories')
+        box_handles = [patches.Patch(edgecolor=self.color_map[e], facecolor='none', label=self.display_names[e]) for e in ents]
+        ax0.legend(handles=box_handles)
 
-        # 3) Velocity vs time
+        # Velocity
         t = np.arange(N)
-        v_ego = trajs["car1"]["vx"]
-        v_npc = trajs["car2"]["vx"] + trajs["car1"]["vx"]
-        ax1.plot(t, v_ego, label="Scenario NPC")
-        ax1.plot(t, v_npc, label="MOBIL")
-        ax1.set_xlabel("Time step")
-        ax1.set_ylabel("Velocity")
-        ax1.set_title("Velocity vs Time")
+        for e in ents:
+            ax1.plot(t, cache[f'{e}_vx'], label=self.display_names[e], color=self.color_map[e])
+        ax1.set_xlabel('Time step')
+        ax1.set_ylabel('Velocity')
+        ax1.set_title('Velocity vs Time')
         ax1.grid(True)
         ax1.legend()
+
+        # Actions
+        acts = cache['actions']
+        ax2.step(t, acts, where='post')
+        ax2.set_xlabel('Time step')
+        ax2.set_ylabel('Action')
+        ax2.set_title('Actions vs Time')
+        ax2.set_yticks(np.unique(acts))
 
         plt.tight_layout()
         plt.show()
 
-    def animate_episode(self,
-                        transitions,
-                        title=None,
-                        interval=100,
-                        repeat=False,
-                        save_path=None):
-        """
-        Animate one episode:
-        - Left panel: bounding boxes + lane lines over time
-        - Right panel: velocity curves growing over time
+    def animate_episode(self, transitions, title=None, interval=1000, repeat=False, save_path=None):
+        cache = self.load(transitions)
+        N = cache['N']
+        t = np.arange(N)
 
-        Args:
-            transitions: list of dicts with 'state'
-            title: optional plot title
-            interval: ms between frames
-            repeat: whether to loop the animation
-            save_path: filepath (e.g., 'episode0.mp4') to save; if None, just return the FuncAnimation
-        """
-        trajs = self.extract(transitions)
-        N = len(transitions)
+        fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6))
 
-        # Precompute positions and velocities
-        ego_x = trajs["car1"]["x"]
-        ego_y = -trajs["car1"]["y"]
-        ego_vx = trajs["car1"]["vx"]
-        ego_vy = trajs["car1"]["vy"]
-
-        npc_x = trajs["car2"]["x"].copy()
-        npc_y = -trajs["car2"]["y"].copy()
-        npc_vx = trajs["car2"]["vx"]
-        npc_vy = trajs["car2"]["vy"]
-
-        # Setup figure & axes
-        fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(14, 6))
-        # Axis 0 limits & lanes
-        x_all = np.concatenate([ego_x, npc_x])
-        y_all = np.concatenate([ego_y, npc_y])
-        x_min, x_max = x_all.min() - self.ego_size[0], x_all.max() + self.ego_size[0]
-        y_min, y_max = y_all.min() - self.ego_size[1], y_all.max() + self.ego_size[1]
+        # BBox panel
+        all_x = np.concatenate([cache[f'{e}_x'] for e in self.entities])
+        all_y = np.concatenate([cache[f'{e}_y'] for e in self.entities])
+        x_min, x_max = all_x.min() - self.ego_size[0], all_x.max() + self.ego_size[0]
+        y_min, y_max = all_y.min() - self.ego_size[1], all_y.max() + self.ego_size[1]
         ax0.set_xlim(x_min, x_max)
         ax0.set_ylim(y_min, y_max)
-        for y, style in self.lane_markings:
-            ax0.hlines(y, x_min-30, x_max+30, colors='k', linestyles=style)
-        ax0.set_xlabel("X position")
-        ax0.set_ylabel("Y position")
-        ax0.set_title(title or "Episode Animation")
+        for y_line, style in self.lane_markings:
+            ax0.hlines(y_line, x_min-30, x_max+30, colors='k', linestyles=style)
+        ax0.set_xlabel('X position')
+        ax0.set_ylabel('Y position')
+        ax0.set_title(title or 'Episode Animation')
 
-        # Axis 1 setup
-        t = np.arange(N)
+        # Velocity panel
         ax1.set_xlim(0, N)
-        v_max = max(ego_vx.max(), npc_vx.max())
-        ax1.set_ylim(0, v_max * 1.1)
-        line_ego, = ax1.plot([], [], label="Scenario NPC", color='blue')
-        line_npc, = ax1.plot([], [], label="MOBIL", color='red')
-        ax1.set_xlabel("Time")
-        ax1.set_ylabel("Velocity")
+        vmax = max(cache[f'{e}_vx'].max() for e in self.entities)
+        ax1.set_ylim(0, vmax * 1.1)
+        line_handles = {e: ax1.plot([], [], label=self.display_names[e], color=self.color_map[e])[0] for e in self.entities}
+        ax1.set_xlabel('Time step')
+        ax1.set_ylabel('Velocity')
         ax1.legend()
         ax1.grid(True)
 
-        # Animation update function
+        # Action panel
+        action_line, = ax2.step([], [], where='post')
+        ax2.set_xlim(0, N)
+        ax2.set_xlabel('Time step')
+        ax2.set_ylabel('Action')
+        ax2.set_title('Actions vs Time')
+        ax2.set_yticks([])
+
+        # Pre-create patches
+        patches_dict = {}
+        for e in self.entities:
+            x0 = cache[f'{e}_x'][0]
+            y0 = cache[f'{e}_y'][0]
+            vx0 = cache[f'{e}_vx'][0]
+            vy0 = cache[f'{e}_vy'][0]
+            patch = self._make_bbox(x0, y0, vx0, vy0, self.size_map[e], self.color_map[e], alpha=1.0)
+            patch.set_label(self.display_names[e])
+            ax0.add_patch(patch)
+            patches_dict[e] = patch
+        ax0.legend()
+
+        def init():
+            return list(patches_dict.values()) + list(line_handles.values()) + [action_line]
+
         def update(i):
-            # Clear previous boxes
-            for patch in ax0.patches[:]:
-                patch.remove()
+            for e in self.entities:
+                x = cache[f'{e}_x'][i]
+                y = cache[f'{e}_y'][i]
+                vx = cache[f'{e}_vx'][i]
+                vy = cache[f'{e}_vy'][i]
+                patch = patches_dict[e]
+                patch.set_xy((x - self.size_map[e][0] / 2, y - self.size_map[e][1] / 2))
+                patch.angle = np.degrees(np.arctan2(vy, vx))
+                line_handles[e].set_data(t[:i+1], cache[f'{e}_vx'][:i+1])
+            acts = cache['actions'][:i+1]
+            action_line.set_data(t[:i+1], acts)
+            ax2.set_yticks(np.unique(cache['actions']))
+            ego_x = cache[f'{self.entities[0]}_x'][i]
+            ax0.set_xlim(ego_x - 30, ego_x + 30)
+            ax0.set_ylim(-30, 30)
+            return list(patches_dict.values()) + list(line_handles.values()) + [action_line]
 
-            # Draw bounding boxes up to current frame i
-            # for j in range(i + 1):
-            alpha = 1.0
-            # Ego bbox
-            bbox_e = self._make_bbox(
-                ego_x[i], ego_y[i], ego_vx[i], ego_vy[i],
-                self.ego_size, 'blue', alpha
-            )
-            ax0.add_patch(bbox_e)
-            # NPC bbox
-            bbox_n = self._make_bbox(
-                npc_x[i], npc_y[i], npc_vx[i], npc_vy[i],
-                self.npc_size, 'red', alpha
-            )
-            ax0.add_patch(bbox_n)
-
-            # Update Axes Limits
-            xmin = ego_x[i] - 30
-            xmax = ego_x[i] + 30
-            ymin = -30
-            ymax = 30
-            ax0.set_xlim(xmin, xmax)
-            ax0.set_ylim(ymin, ymax)
-
-            # Update velocity lines
-            line_ego.set_data(t[:i + 1], ego_vx[:i + 1])
-            line_npc.set_data(t[:i + 1], npc_vx[:i + 1])
-            return ax0.patches + [line_ego, line_npc]
-
-        anim = FuncAnimation(fig, update, frames=N,
-                             interval=interval, blit=False, repeat=repeat)
+        anim = FuncAnimation(
+            fig,
+            update,
+            frames=N,
+            init_func=init,
+            interval=interval,
+            blit=False,
+            repeat=repeat
+        )
 
         if save_path:
+            if save_path.endswith(os.sep):
+                os.makedirs(save_path, exist_ok=True)
+                fname = f"{self.display_names[self.entities[0]]}_vs_{self.display_names.get(self.entities[1], '')}.mp4"
+                save_path = os.path.join(save_path, fname)
+            else:
+                parent = os.path.dirname(save_path)
+                if parent and not os.path.isdir(parent):
+                    os.makedirs(parent, exist_ok=True)
             anim.save(save_path, dpi=100)
             plt.close(fig)
         else:
             return anim
 
+
+def load_visualizer_and_episodes(
+    data_dir,
+    state_slices,
+    relative_map=None,
+    ego_size=(5, 2),
+    npc_size=(5, 2),
+    lane_markings=None,
+    scenario=None
+):
+    # Load metadata and frame_stack
+    meta_path = os.path.join(data_dir, 'metadata.json')
+    with open(meta_path) as f:
+        metadata = json.load(f)
+    frame_stack = metadata.get('frame_stack', 1)
+
+    # Determine policy files
+    pa = metadata.get('policy_A', [])
+    pb = metadata.get('policy_B', [])
+    multi = None
+    if len(pa) > 1:
+        multi = ('A', pa)
+    elif len(pb) > 1:
+        multi = ('B', pb)
+
+
+    if multi:
+        side, choices = multi
+        choices.append('policies.DQNPolicy')
+        if scenario is None:
+            raise ValueError(f"Multiple entries in policy_{side}, please specify scenario among {choices}")
+        if scenario not in choices:
+            raise ValueError(f"scenario must be one of {choices}")
+        file1 = scenario
+        file2 = pb[0] if side == 'A' and pb else pa[0] if side == 'B' and pa else None
+    else:
+        if len(pa) >= 1:
+            file1 = pa[0]
+        else:
+            raise ValueError("metadata.json must contain at least one entry in policy_A")
+        file2 = pb[0] if pb else None
+
+    name1 = file1.split('.')[-1]
+    name2 = file2.split('.')[-1] if file2 else 'Opponent'
+
+    # Load episodes
+    ep_fn = f'episodes_{file1}.jsonl'
+    ep_path = os.path.join(data_dir, ep_fn)
+    store = TrajectoryStore(ep_path)
+    episodes = store.load(ep_path)
+
+    entity_names = {'car1': name1, 'car2': name2}
+    vis = TrajectoryVisualizer(
+        state_slices,
+        relative_map=relative_map,
+        ego_size=ego_size,
+        npc_size=npc_size,
+        lane_markings=lane_markings or [],
+        entity_names=entity_names,
+        frame_stack=frame_stack
+    )
+    return vis, episodes, name1, name2
+
+
+# data_dir = '../mobil_vs_scenarios'
+# with open(os.path.join(data_dir, 'metadata.json')) as f:
+#     metadata = json.load(f)
+
+# scenario_policies = None
+# policy_A_name = None
+# policy_B_name = None
+# if len(metadata['policy_A']) > 1:
+#     scenario_policies = metadata['policy_A']
+#     policy_A_name = 'Scenario'
+# elif len(metadata['policy_B']) > 1:
+#     scenario_policy = metadata['policy_B']
+#     policy_B_name = 'Scenario'
+
+# if policy_A_name is not None:
+#     policy_B_name = metadata['policy_B'][0].split('.')[1]
+# elif policy_B_name is not None:
+#     policy_A_name = metadata['policy_A'][0].split('.')[1]
+
+# # Example usage:
+# scenario_name = metadata['policy_A'][0]
+# store = TrajectoryStore(os.path.join(data_dir, 'episodes_' + scenario_name + '.jsonl'))
+# episodes = store.load(os.path.join(data_dir, 'episodes_' + scenario_name + '.jsonl'))
+# vis = TrajectoryVisualizer(STATE_SLICES, None, entity_names={'car1': scenario_name, 'car2': policy_B_name})
+# vis.plot_episode_with_bboxes(episodes[2], title=f"{scenario_name} vs {policy_B_name}")
+# anim = vis.animate_episode(episodes[2], title = f'{scenario_name} vs {policy_B_name}', interval=1000)
+# plt.show()
+
+
 # Example usage:
-store = TrajectoryStore("trajectories/my_agent.jsonl")
-episodes = store.load('../mobil_vs_cutin/all_episodes.jsonl')
-vis = TrajectoryVisualizer(STATE_SLICES, None)
-vis.plot_episode_with_bboxes(episodes[2], title='Episode 0')
-anim = vis.animate_episode(episodes[2], title = 'Cutin vs MOBIL',interval=1000)
-plt.show()
+STATE_SPEC = [
+    ("car1", ["presence", "x", "y", "vx", "vy"]),
+    ("car2", ["presence", "x", "y", "vx", "vy"]),
+]
+RELATIVE_MAP = {
+    # "car2": "car1",  # car2's x,y are relative to car1's x,y
+}
+STATE_SLICES = get_state_slices(STATE_SPEC)
+
+
+data_dir = '../test_dqn_vs_scenarios_1stack'
+scenario = 'policies.MobilPolicy.forward_left'
+mp4_path = os.path.join(data_dir,'mp4s')
+os.makedirs(mp4_path, exist_ok=True)
+vis, episodes, name1, name2 = load_visualizer_and_episodes(
+    data_dir,
+    STATE_SLICES,
+    relative_map=RELATIVE_MAP,
+    ego_size=(5,2),
+    npc_size=(5,2),
+    lane_markings=[(-6,'solid'),(-2,'dashed'),(2,'solid')],
+    scenario=scenario
+)
+
+for i in range(len(list(episodes.keys()))):
+    key = list(episodes.keys())[i]
+    # vis.plot_episode_with_bboxes(episodes[first_key], title=f"{name1} vs {name2}")
+    save_path = os.path.join(mp4_path, f'{scenario}_episode_{key}.mp4')
+    anim = vis.animate_episode(episodes[key], title=f"{name1} vs {name2}", save_path = save_path)
+    plt.show()
