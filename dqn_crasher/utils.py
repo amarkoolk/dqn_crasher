@@ -1,7 +1,7 @@
 import itertools
 from functools import partial
 from typing import Callable
-
+import importlib
 import numpy as np
 from numba import jit
 
@@ -364,3 +364,9 @@ def random_argmax(x: np.ndarray) -> int:
 def random_dist(n):
     q = np.random.random(n)
     return q / q.sum()
+
+
+def class_from_path(path: str) -> Callable:
+    module_name, class_name = path.rsplit(".", 1)
+    class_object = getattr(importlib.import_module(module_name), class_name)
+    return class_object

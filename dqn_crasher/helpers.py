@@ -2,6 +2,7 @@ from collections import deque
 import torch
 from typing import Callable, List, Sequence, Tuple, Union
 import importlib
+import numpy as np
 
 def class_from_path(path: str) -> Callable:
     module_name, class_name = path.rsplit(".", 1)
@@ -30,9 +31,10 @@ def initialize_stats(queue_len = 100) -> dict:
         "episode_num": 0
     }
 
-def populate_stats(info, agent, ego_state, npc_state, reward, episode_statistics: dict, is_ego: bool = True):
+def populate_stats(info, agent, ego_state, npc_state, reward, episode_statistics: dict, is_ego: bool = True, scenario = None):
 
     episode_statistics['spawn_config'] = info['spawn_config']
+    episode_statistics['scenario'] = scenario
     episode_statistics['episode_rewards'] += reward
     episode_statistics['episode_duration'] += 1
     episode_statistics['ego_speed'] += ego_state[0,3].cpu().numpy()
@@ -60,14 +62,24 @@ def reset_stats(stats: dict):
 
     stats['episode_num'] += 1
 
-def obs_to_state(obs, n_observations, device):
-    
+def interleave_stacked_frames(obs, n_cars, n_features, n_stack):
+    if n_stack > 1:
+        reshaped_obs = obs.reshape((obs.shape[0], n_features, n_stack))
+        interleaved_obs = np.empty((n_cars * n_stack, n_features), dtype = obs.dtype)
+        for i in range(n_cars):
+            interleaved_obs[i::n_cars] = reshaped_obs[i]
+    else:
+        interleaved_obs = obs
+
+    return interleaved_obs.flatten()
+
+def obs_to_state(obs, n_observations, device, num_features = 5, frame_stack = 1):
+
     if(len(obs) == 2):
         flattened_ego_obs = obs[0].flatten()
-        ego_obs = flattened_ego_obs[:n_observations]
+        ego_obs = interleave_stacked_frames(obs[0], len(obs), num_features, frame_stack)
         ego_state = torch.tensor(ego_obs.reshape(1, len(ego_obs)), dtype=torch.float32, device=device)
-        flattened_npc_obs = obs[1].flatten()
-        npc_obs = flattened_npc_obs[:n_observations]
+        npc_obs = interleave_stacked_frames(obs[1], len(obs), num_features, frame_stack)
         npc_state = torch.tensor(npc_obs.reshape(1, len(npc_obs)), dtype=torch.float32, device=device)
     elif(len(obs) == 1):
         flattened_ego_obs = obs[0].flatten()
@@ -88,7 +100,6 @@ def obs_to_state(obs, n_observations, device):
     return ego_state, npc_state
 
 def make_step_actions(ego_action, npc_action, vs_mobil=False):
-    # if we’re “versus MOBIL” then MOBIL is our ego, 
+    # if we’re “versus MOBIL” then MOBIL is our ego,
     # so we send (npc, npc)
     return (npc_action, npc_action) if vs_mobil else (ego_action, npc_action)
-

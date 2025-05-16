@@ -37,7 +37,13 @@ class MultiAgentRunner:
             initialize_logging(self.cfg, train_ego=(train_player=="A"))
             stats = helpers.initialize_stats()
 
+        if self.cfg.get('save_trajectories', False):
+            self.A.store.save_metadata(self.cfg)
+
         while t < total_timesteps:
+            self.A.reset()
+            self.B.reset()
+            self._set_config()
             steps = self._run_episode(train_player=train_player, t_start=t, stats=stats, pbar=pbar)
             t += steps
 
@@ -50,13 +56,16 @@ class MultiAgentRunner:
         wandb.finish()
 
     def test(self):
-        total_eps = self.cfg.get('total_episodes', 100)
+        total_eps = self.cfg.get('testing_episodes', 10)
         eps_done  = 0
         pbar      = tqdm(total=total_eps)
 
         if self.cfg.get('track', False):
             initialize_logging(self.cfg, train_ego=False, eval=True)
             stats = helpers.initialize_stats()
+
+        if self.cfg.get('save_trajectories', False):
+            self.A.store.save_metadata(self.cfg)
 
         while eps_done < total_eps:
             _ = self._run_episode(train_player=None, t_start=0, stats=stats, pbar=None)
@@ -68,40 +77,51 @@ class MultiAgentRunner:
         if pbar: pbar.close()
         wandb.finish()
 
-    def _set_config(self, train_player):
+    def _set_config(self):
         def unwrap(policy_obj):
             # if it's a distribution, grab the inner scenario policy
             return policy_obj.current_policy if isinstance(policy_obj, policies.PolicyDistribution) else policy_obj
 
+        scenario_policy = False
+        mobil_policy = False
         for name in ('A', 'B'):
             policy = unwrap(getattr(self, name))
             # ScenarioPolicy always gets configured
             if isinstance(policy, policies.ScenarioPolicy):
-                return policy.set_config(self.gym_cfg)
-            # DQNPolicy only if it's the one we're training
-            if isinstance(policy, policies.DQNPolicy) and name == train_player:
-                return policy.set_config(self.gym_cfg)
+                policy.set_config(self.cfg)
+                scenario_policy = True
+            # If there is no Scenario Policy use other policy
+            elif isinstance(policy, policies.MobilPolicy):
+                mobil_policy = True
+                if not scenario_policy:
+                    policy.set_config(self.cfg)
 
-        raise Exception("Invalid Config Combination")
+        if mobil_policy is False:
+            self.cfg['gym_config']['vs_mobil'] = False
+            self.cfg['gym_config']['use_mobil'] = False
+            self.cfg['gym_config']['controlled_vehicles'] = 2
+            self.cfg['gym_config']['other_vehicles'] = 0
+        else:
+            self.cfg['gym_config']['vs_mobil'] = True
+            self.cfg['gym_config']['use_mobil'] = True
+            self.cfg['gym_config']['controlled_vehicles'] = 1
+            self.cfg['gym_config']['other_vehicles'] = 1
+
+        self.gym_cfg = self.cfg['gym_config']
 
     def _run_episode(self, train_player, t_start, stats, pbar):
         total_timesteps = self.cfg.get('total_timesteps', 100000)
 
-        # reset both policies
-        self.A.reset()
-        self.B.reset()
-
-        self._set_config(train_player)
-
         env  = gym.make(self.env_name, config=self.gym_cfg, render_mode="rgb_array")
         obs, info = env.reset()
-        ego_s, npc_s = helpers.obs_to_state(obs, self.n_obs, self.dev)
+        ego_s, npc_s = helpers.obs_to_state(obs, self.n_obs, self.dev, frame_stack = self.cfg['frame_stack'])
 
         self.A.set_state(ego_s, npc_s)
-        self.B.set_state(ego_s, npc_s)
+        self.B.set_state(npc_s, ego_s)
 
         if self.cfg.get('save_trajectories', False):
             self.A.store.start_episode(stats['episode_num'])
+            self.B.store.start_episode(stats['episode_num'])
 
         t     = t_start
         done  = False
@@ -121,29 +141,52 @@ class MultiAgentRunner:
             if self.cfg.get('render', False):
                 env.render()
 
-            next_A, next_B = helpers.obs_to_state(obs, self.n_obs, self.dev)
+            next_A, next_B = helpers.obs_to_state(obs, self.n_obs, self.dev, frame_stack = self.cfg['frame_stack'])
             transition_A = Transition(ego_s, a_A, next_A, torch.tensor(reward, device=self.dev))
             transition_B = Transition(npc_s, a_B, next_B, torch.tensor(reward, device=self.dev))
             ego_s = self.A.update(transition_A, term)
             npc_s = self.B.update(transition_B, term)
 
             self.A.set_state(ego_s, npc_s)
-            self.B.set_state(ego_s, npc_s)
+            self.B.set_state(npc_s, ego_s)
 
 
             # store trajectories for the  policy
             if self.cfg.get('save_trajectories'):
                 self.A.store.add(transition_A)
+                self.B.store.add(transition_B)
 
             # stats & logging
             if train_player is None or train_player=='A':
                 is_ego = True
 
+            if train_player == "A":
+                agent = self.A.agent
+            elif train_player == "B":
+                agent = self.B.agent
+            else:
+                agent = None
+
+
+            if isinstance(self.A, policies.PolicyDistribution):
+                if isinstance(self.A.current_policy, policies.ScenarioPolicy):
+                    scenario = str(type(self.A.current_policy.scenario))
+                else:
+                    scenario = None
+            elif isinstance(self.B, policies.PolicyDistribution):
+                if isinstance(self.B.current_policy, policies.ScenarioPolicy):
+                    scenario = str(type(self.B.current_policy.scenario))
+                else:
+                    scenario = None
+            else:
+                scenario = None
+
             helpers.populate_stats(info,
-                agent=(self.A.agent if train_player=="A" else self.B.agent),
+                agent=agent,
                 ego_state=ego_s, npc_state=npc_s,
                 reward=reward, episode_statistics=stats,
-                is_ego=is_ego
+                is_ego=is_ego,
+                scenario = scenario
             )
 
 
@@ -158,6 +201,7 @@ class MultiAgentRunner:
 
         if self.cfg.get('save_trajectories', False):
             self.A.store.end_episode()
+            self.B.store.end_episode()
 
 
         env.close()

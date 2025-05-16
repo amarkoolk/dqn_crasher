@@ -9,14 +9,11 @@ class TrajectoryStore(object):
         self.episodes = {}
         self.current_episode = None
 
-        dirpath = os.path.dirname(file_path)
-        if dirpath:
-            os.makedirs(dirpath, exist_ok=True)
-        
-        self.file_path = file_path
+        self.dirpath = os.path.dirname(file_path)
+        if self.dirpath:
+            os.makedirs(self.dirpath, exist_ok=True)
 
-    def set_metadata(self, metadata: dict):
-        self.metadata = metadata
+        self.file_path = file_path
 
     def start_episode(self, episode_idx: int):
         """Begin collecting a fresh list of transitions."""
@@ -29,7 +26,7 @@ class TrajectoryStore(object):
         """
         if self.current_episode is None:
             raise RuntimeError("call start_episode() before add()")
-        
+
         # Convert numpy arrays to lists, ints/floats to native types
         entry = {
             "state":      transition.state.tolist(),
@@ -59,6 +56,11 @@ class TrajectoryStore(object):
             f.write("\n")
 
         self.current_episode = None
+
+    def save_metadata(self, config : dict):
+        metadata_file = os.path.join(self.dirpath, 'metadata.json')
+        with open(metadata_file, 'w') as f:
+            json.dump(config, f)
 
     def load(self, file_path: str = None):
         """

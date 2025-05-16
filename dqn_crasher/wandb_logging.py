@@ -43,12 +43,12 @@ def initialize_logging(config, train_ego = None, eval = False, npc_pool_size = N
         tags = config.get('wandb_tag').split(',')
     else:
         tags = []
-    
-        
+
+
     run = wandb.init(
             # set the wandb project where this run will be logged
             project=config.get('wandb_project_name', 'safetyh'),
-            
+
             # track hyperparameters and run metadata
             config=run_config,
 
@@ -64,11 +64,11 @@ def log_evaluation(args, n_cycle):
     run_config ={
         "cycle": n_cycle
     }
-        
+
     run = wandb.init(
             # set the wandb project where this run will be logged
             project=args.wandb_project_name,
-            
+
             # track hyperparameters and run metadata
             config=run_config
         )
@@ -101,6 +101,7 @@ def log_stats(info, episode_statistics: dict, ego: bool):
         f"rollout/{spawn_config}/num_crashes": sum(episode_statistics['num_crashes'][spawn_config]),
         f"rollout/{spawn_config}/sr100": sum(episode_statistics['num_crashes'][spawn_config][-100:])/100,
         f"rollout/{spawn_config}/collision_reward": episode_statistics['collision_reward']/episode_statistics['episode_duration'],
+        "scenario": episode_statistics['scenario']
     }
 
     if ego:

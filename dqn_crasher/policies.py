@@ -34,7 +34,8 @@ class BasePolicy(ABC):
 class DQNPolicy(BasePolicy):
     def __init__(self, agent, trajectory_store_dir, train):
         self.agent : DQN_Agent = agent
-        self.store : TrajectoryStore = TrajectoryStore(file_path = trajectory_store_dir)
+        class_name = type(self).__module__ + "." + type(self).__name__
+        self.store : TrajectoryStore = TrajectoryStore(file_path = trajectory_store_dir + f'_{class_name}.jsonl')
         self.train : bool = train
 
     def reset(self):
@@ -64,18 +65,20 @@ class DQNPolicy(BasePolicy):
 
 
 class ScenarioPolicy(BasePolicy):
-    def __init__(self, scenario_class, len_obs, trajectory_store_dir):
-        self.scenario    = scenario_class()
+    def __init__(self, scenario_class, len_obs, config):
+        self.scenario          = scenario_class(use_spawn_distribution = config.get('train_ego',False))
         self.len_obs           = len_obs
         self.agent             = None
-        self.store : TrajectoryStore = TrajectoryStore(file_path = trajectory_store_dir)
+        class_name = type(self.scenario).__module__ + "." + type(self.scenario).__name__
+        trajectory_save_path = os.path.join(config.get('root_directory', './'), config.get('trajectory_path', './trajectories')+ f'_{class_name}.jsonl')
+        self.store : TrajectoryStore = TrajectoryStore(file_path = trajectory_save_path)
 
 
     def reset(self):
         self.scenario.reset()
 
     def set_config(self, config: dict):
-        self.scenario.set_config(config)
+        self.scenario.set_config(config['gym_config'])
 
     def set_state(self, ego_state, npc_state):
         self.scenario.set_state(ego_state, npc_state)
@@ -90,9 +93,13 @@ class ScenarioPolicy(BasePolicy):
 
 class MobilPolicy(BasePolicy):
 
-    def __init__(self, trajectory_store_dir):
+    def __init__(self, trajectory_store_dir, spawn_configs):
         self.agent = None
-        self.store : TrajectoryStore = TrajectoryStore(file_path = trajectory_store_dir)
+        self.spawn_configs = spawn_configs
+        class_name = type(self).__module__ + "." + type(self).__name__
+        spawn_name = self.spawn_configs[0] if len(self.spawn_configs) == 1 else 'scenario'
+        self.store : TrajectoryStore = TrajectoryStore(file_path = trajectory_store_dir + f'_{class_name}.{spawn_name}.jsonl')
+        print(f"Mobil Policy: {self.spawn_configs}")
 
     def reset(self):
         pass
@@ -101,7 +108,11 @@ class MobilPolicy(BasePolicy):
         pass
 
     def set_config(self, config: dict):
-        pass
+        config['gym_config']['spawn_configs'] = self.spawn_configs
+        config['gym_config']['vs_mobil'] = True
+        config['gym_config']['use_mobil'] = True
+        config['gym_config']['controlled_vehicles'] = 1
+        config['gym_config']['other_vehicles'] = 1
 
     def select_action(self, own_state, other_state, t_step=None):
         return torch.squeeze(torch.tensor([0])).view(1, 1)
@@ -118,8 +129,11 @@ class PolicyDistribution(BasePolicy):
         self.store = self.current_policy.store
         random.seed(seed)
 
-    def reset(self):
-        self.current_policy = random.choice(self.policies)
+    def reset(self, policy_num = None):
+        if policy_num == None:
+            self.current_policy = random.choice(self.policies)
+        else:
+            assert isinstance(policy_num, int)
         self.store = self.current_policy.store
         self.current_policy.reset()
 

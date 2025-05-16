@@ -7,7 +7,7 @@ import math
 import numpy as np
 from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
 
-        
+
 
 class DQN(nn.Module):
 
@@ -32,7 +32,7 @@ class DQN(nn.Module):
         for layer in self.hidden_layers:
             x = F.relu(layer(x))
         return self.output(x)
-    
+
 class DQN_Agent(object):
 
     def __init__(self, n_state, n_action, action_space, config, device = 'cpu', trajectory_path = 'trajectories', cycle = 0, ego_or_npc = 'EGO', override_obs = -1):
@@ -69,8 +69,8 @@ class DQN_Agent(object):
         if override_obs != -1:
             self.n_observations = override_obs
 
-        self.policy_net = DQN(self.n_observations, self.n_actions, num_hidden_layers=config.get('num_hidden_layers', 1), hidden_layer=config.get('hidden_layer', 256)).to(device)
-        self.target_net = DQN(self.n_observations, self.n_actions, num_hidden_layers=config.get('num_hidden_layers', 1), hidden_layer=config.get('hidden_layer', 256)).to(device)
+        self.policy_net = torch.compile(DQN(self.n_observations, self.n_actions, num_hidden_layers=config.get('num_hidden_layers', 1), hidden_layer=config.get('hidden_layer', 256)).to(device))
+        self.target_net = torch.compile(DQN(self.n_observations, self.n_actions, num_hidden_layers=config.get('num_hidden_layers', 1), hidden_layer=config.get('hidden_layer', 256)).to(device))
 
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
@@ -97,17 +97,17 @@ class DQN_Agent(object):
 
             sampled_action = self.action_space.sample()
             return torch.tensor(np.array([[sampled_action]]), device=self.device, dtype=torch.long)
-        
+
     def optimize_model(self):
         if len(self.memory) < self.batch_size:
             return
-        
+
         if isinstance(self.memory, PrioritizedExperienceReplay):
             idxs, transitions, is_weights = self.memory.sample(self.batch_size)
         else:
             transitions = self.memory.sample(self.batch_size)
 
-        
+
         # Transpose the batch (see https://stackoverflow.com/a/19343/3343043 for
         # detailed explanation). This converts batch-array of Transitions
         # to Transition of batch-arrays.
@@ -120,7 +120,7 @@ class DQN_Agent(object):
                                             batch.next_state)), device=self.device, dtype=torch.bool)
         non_final_next_states = torch.cat([s for s in batch.next_state
                                                     if s is not None])
-        
+
         state_batch = torch.cat(batch.state)
         action_batch = torch.cat(batch.action)
         reward_batch = torch.cat(batch.reward)
@@ -144,12 +144,12 @@ class DQN_Agent(object):
         # Compute Huber loss
         criterion = nn.SmoothL1Loss()
         loss = criterion(state_action_values, expected_state_action_values)
-        
+
         # update priorities
         if isinstance(self.memory, PrioritizedExperienceReplay):
             errors = (state_action_values - expected_state_action_values).detach().cpu().squeeze().tolist()
             self.memory.update(idxs, errors)
-        
+
             loss = (torch.FloatTensor(is_weights).to(self.device) * loss).mean()
 
 
@@ -163,7 +163,7 @@ class DQN_Agent(object):
     @torch.no_grad
     def predict(self, state):
         return torch.argmax(self.policy_net(state))
-        
+
     def update(self, state, action, next_state, reward, terminated):
 
         if terminated:
