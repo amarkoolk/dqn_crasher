@@ -117,7 +117,7 @@ class TrajectoryVisualizer:
         N = cache['N']
         ents = self.entities
 
-        fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(18, 6))
+        fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(18, 6))
 
         # Bounding boxes
         all_x = np.concatenate([cache[f'{e}_x'] for e in ents])
@@ -147,20 +147,12 @@ class TrajectoryVisualizer:
         # Velocity
         t = np.arange(N)
         for e in ents:
-            ax1.plot(t, cache[f'{e}_vx'], label=self.display_names[e], color=self.color_map[e])
+            ax1.plot(t, (cache[f'{e}_vx']**2 + cache[f'{e}_vy']**2)**0.5, label=self.display_names[e], color=self.color_map[e])
         ax1.set_xlabel('Time step')
         ax1.set_ylabel('Velocity')
         ax1.set_title('Velocity vs Time')
         ax1.grid(True)
         ax1.legend()
-
-        # Actions
-        acts = cache['actions']
-        ax2.step(t, acts, where='post')
-        ax2.set_xlabel('Time step')
-        ax2.set_ylabel('Action')
-        ax2.set_title('Actions vs Time')
-        ax2.set_yticks(np.unique(acts))
 
         plt.tight_layout()
         plt.show()
@@ -365,8 +357,8 @@ RELATIVE_MAP = {
 STATE_SLICES = get_state_slices(STATE_SPEC)
 
 
-data_dir = '../test_dqn_vs_scenarios_1stack'
-scenario = 'policies.MobilPolicy.forward_left'
+data_dir = '../mobil_vs_scenarios'
+scenario = 'scenarios.CutIn'
 mp4_path = os.path.join(data_dir,'mp4s')
 os.makedirs(mp4_path, exist_ok=True)
 vis, episodes, name1, name2 = load_visualizer_and_episodes(
@@ -381,7 +373,6 @@ vis, episodes, name1, name2 = load_visualizer_and_episodes(
 
 for i in range(len(list(episodes.keys()))):
     key = list(episodes.keys())[i]
-    # vis.plot_episode_with_bboxes(episodes[first_key], title=f"{name1} vs {name2}")
-    save_path = os.path.join(mp4_path, f'{scenario}_episode_{key}.mp4')
-    anim = vis.animate_episode(episodes[key], title=f"{name1} vs {name2}", save_path = save_path)
-    plt.show()
+    vis.plot_episode_with_bboxes(episodes[key], title=f"{name1} vs {name2}")
+    # save_path = os.path.join(mp4_path, f'{scenario}_episode_{key}.mp4')
+    # anim = vis.animate_episode(episodes[key], title=f"{name1} vs {name2}", save_path = save_path)

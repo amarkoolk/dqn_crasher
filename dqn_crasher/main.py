@@ -114,7 +114,9 @@ if __name__=="__main__":
     gym_config['normalize_reward'] = True
     gym_config['collision_reward'] = -100
     gym_config['observation']['observation_config']['frame_stack'] = config['frame_stack']
+    config['spawn_config'] = gym_config['spawn_configs']
     config['gym_config'] = gym_config
+
 
     device = DeviceHelper.get(config)
     p_A, p_B = make_players(config, gym_config, device)

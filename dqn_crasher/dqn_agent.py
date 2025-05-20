@@ -128,6 +128,7 @@ class DQN_Agent(object):
         # Compute Q(s_t, a) - the model computes Q(s_t), then we select the
         # columns of actions taken. These are the actions which would've been taken
         # for each batch state according to policy_net
+
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
         # Compute V(s_{t+1}) for all next states.
@@ -137,7 +138,9 @@ class DQN_Agent(object):
         # state value or 0 in case the state was final.
         next_state_values = torch.zeros(self.batch_size, device=self.device)
         with torch.no_grad():
-            next_state_values[non_final_mask] = self.target_net(non_final_next_states).max(1)[0]
+            # Select Actions for Target net based on Value Net ( better action )
+            _, action_prime = self.policy_net(non_final_next_states).max(1)
+            next_state_values[non_final_mask] = self.target_net(non_final_next_states).gather(1, action_prime.unsqueeze(1)).squeeze()
         # Compute the expected Q values
         expected_state_action_values = (next_state_values.unsqueeze(1) * self.gamma) + reward_batch
 

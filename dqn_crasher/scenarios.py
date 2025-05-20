@@ -16,6 +16,9 @@ class Scenario:
         self.spawn_configs = []
         self.use_spawn_distribution = use_spawn_distribution
 
+    def set_spawn_distriubtion(self, use_spawn_distribution: bool = False):
+        self.use_spawn_distribution = use_spawn_distribution
+
     def set_state(self, ego_state: np.ndarray, npc_state: np.ndarray):
 
         sliced_ego_state = ego_state[0, -10:]
@@ -26,13 +29,14 @@ class Scenario:
         self.npc_x = sliced_npc_state[1]
         self.npc_y = sliced_npc_state[2]
 
-    def reset(self):
+    def reset(self, test = False):
         """
         Common reset logic across all scenarios.
         """
         self.state = None
         self.end_frames = 0
         self.prev_action = Action.IDLE.value
+        self.set_spawn_distriubtion(use_spawn_distribution = not test)
 
     def get_action(self):
         """
@@ -146,12 +150,12 @@ class CutIn(Scenario):
         self.maneuver_counter = 0
         self.spawn_configs = ['behind_left']
 
-    def reset(self):
+    def reset(self, test = False):
         """
         Override reset if scenario-specific attributes need re-initialization.
         Still call super() for the common steps.
         """
-        super().reset()
+        super().reset(test)
         self.current_maneuver = self.CutInManeuver.ACCELERATE
         self.maneuver_counter = 0
 
@@ -204,12 +208,12 @@ class CutInSlowDown(Scenario):
         self.prev_action = Action.IDLE.value
         self.spawn_configs = ['forward_left']
 
-    def reset(self):
+    def reset(self, test = False):
         """
         Override reset if scenario-specific attributes need re-initialization.
         Still call super() for the common steps.
         """
-        super().reset()
+        super().reset(test)
         self.maneuver_counter = 0
         self.prev_action = Action.IDLE.value
         self.current_maneuver = self.CutInManeuver.WAIT
