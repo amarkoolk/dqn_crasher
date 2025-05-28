@@ -41,27 +41,19 @@ def initialize_stats(queue_len = 100) -> dict:
         "is_aggregated": False
     }
 
-def populate_stats(info, agent, ego_state, npc_state, reward, episode_statistics: dict, is_ego: bool = True, scenario = None, policy_name = None, specific_policy = None):
+def populate_stats(info, episode_statistics: dict):
 
-    episode_statistics['spawn_config'] = info['spawn_config']
-    episode_statistics['scenario'] = scenario
-    if policy_name:
-        episode_statistics['policy_name'] = policy_name
-    if specific_policy:
-        episode_statistics['specific_policy_name'] = specific_policy
-    episode_statistics['episode_rewards'] += reward
+    episode_statistics['scenario'] = info['scenario']
     episode_statistics['episode_duration'] += 1
-    episode_statistics['ego_speed'] += ego_state[0,3].cpu().numpy()
-    episode_statistics['npc_speed'] += npc_state[0,3].cpu().numpy()
-    if is_ego:
-        episode_statistics['right_lane_reward'] += info['rewards']['right_lane_reward']
-        episode_statistics['high_speed_reward'] += info['rewards']['high_speed_reward']
-    else:
-        episode_statistics['ttc_x_reward'] += info['rewards']['ttc_x_reward']
-        episode_statistics['ttc_y_reward'] += info['rewards']['ttc_y_reward']
+    episode_statistics['ego_speed'] += info['ego_speed']
+    episode_statistics['npc_speed'] += info['npc_speed']
+    episode_statistics['right_lane_reward'] += info['rewards']['right_lane_reward']
+    episode_statistics['high_speed_reward'] += info['rewards']['high_speed_reward']
+    episode_statistics['ttc_x_reward'] += info['rewards']['ttc_x_reward']
+    episode_statistics['ttc_y_reward'] += info['rewards']['ttc_y_reward']
     episode_statistics['collision_reward'] += info['rewards']['collision_reward']
-    if agent is not None:
-        episode_statistics['epsilon'] = agent.eps_threshold
+    episode_statistics['episode_rewards'] += info['rewards']['total']
+    episode_statistics['epsilon'] = info['eps_threshold']
 
 def reset_stats(stats: dict, preserve_episode_num=False):
     # Save counters and flags if we need to preserve them

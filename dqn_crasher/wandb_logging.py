@@ -70,11 +70,6 @@ def initialize_logging(config, train_ego = None, eval = False, checkpoint = Fals
     wandb.define_metric("checkpoint_step")
     wandb.define_metric("checkpoint_summary/*", step_metric="checkpoint_step")
 
-    # Specific policy metrics use the same x-axes based on their prefix
-    wandb.define_metric("training/specific/*", step_metric="training_step")
-    wandb.define_metric("checkpoint_episode/specific/*", step_metric="testing_step")
-    wandb.define_metric("checkpoint_summary/specific/*", step_metric="checkpoint_step")
-
     return run
 
 def log_evaluation(args, n_cycle):
@@ -96,38 +91,14 @@ def log_evaluation(args, n_cycle):
     return run
 
 
-def log_stats(info, episode_statistics: dict, ego: bool, policy_prefix=None, checkpoint=False, checkpoint_step=None, checkpoint_summary=False, aggregated=False, specific_policy=None):
-    # Safety check - ensure episode_statistics is properly initialized
-    if not episode_statistics:
-        print("Warning: Empty episode_statistics provided to log_stats")
-        return
-
-    # Ensure we're using the checkpoint_step if provided to avoid step conflicts
-    if checkpoint_step is not None:
-        # Force episode_num to match checkpoint_step to ensure monotonic step numbering
-        episode_statistics['episode_num'] = checkpoint_step
-
-    # Handle info safely
-    if info:
-        spawn_config = info.get('spawn_config', "unknown")
-        crashed = float(info.get('crashed', 0))
-    else:
-        spawn_config = "checkpoint_test" if checkpoint else "unknown"
-        crashed = 0.0
-
-    # Initialize crash statistics for this spawn config if it doesn't exist
-    if 'num_crashes' not in episode_statistics:
-        episode_statistics['num_crashes'] = {}
-    if spawn_config not in episode_statistics['num_crashes']:
-        episode_statistics['num_crashes'][spawn_config] = []
-
-    # Initialize total_crashes if it doesn't exist
-    if 'total_crashes' not in episode_statistics:
-        episode_statistics['total_crashes'] = []
+def log_stats(info, episode_statistics: dict, policy_prefix=None, checkpoint=False, checkpoint_step=None):
 
     # Add crash data
-    episode_statistics['num_crashes'][spawn_config].append(crashed)
-    episode_statistics['total_crashes'].append(crashed)
+    if info['scenario'] not in episode_statistics:
+        episode_statistics['num_crashes'][info['scenario']] = []
+
+    episode_statistics['num_crashes'][info['scenario']].append(info['crashed'])
+    episode_statistics['total_crashes'].append(info['crashed'])
 
     # Calculate episode statistics safely
     episode_duration = max(1, episode_statistics.get('episode_duration', 1))  # Avoid div/0
@@ -150,38 +121,26 @@ def log_stats(info, episode_statistics: dict, ego: bool, policy_prefix=None, che
     episode_statistics['ego_speed_total'].append(ego_speed/episode_duration)
     episode_statistics['npc_speed_total'].append(npc_speed/episode_duration)
 
-    # Determine the correct prefix for metrics with clearer separation
-    if checkpoint_summary:
-        # Checkpoint summaries get their own distinct namespace
-        prefix = "checkpoint_summary"
-        if policy_prefix:
-            prefix = f"{prefix}/{policy_prefix}"
+    # Use more descriptive prefixes for different metric types
+    if checkpoint:
+        prefix = "checkpoint"  # Individual checkpoint testing episodes
     else:
-        # Use more descriptive prefixes for different metric types
-        if checkpoint:
-            prefix = "checkpoint_episode"  # Individual checkpoint testing episodes
-        else:
-            prefix = "training"  # Regular training metrics
+        prefix = "training"  # Regular training metrics
 
-        if policy_prefix:
-            prefix = f"{prefix}/{policy_prefix}"
+    if policy_prefix:
+        prefix = f"{prefix}/{policy_prefix}"
 
     # Determine which step metric to use
-    if checkpoint_summary:
-        step_metric = "checkpoint_step"
-    elif checkpoint:
+    if checkpoint:
         step_metric = "testing_step"
     else:
         step_metric = "training_step"
 
-    # Add aggregated indicator for summary stats
-    if aggregated:
-        prefix = f"{prefix}/aggregated"
 
     # For crash rate calculation, use min to avoid division by zero
     total_crashes = episode_statistics.get('total_crashes', [])
     crash_rate_divisor = min(100, len(total_crashes))
-    config_crash_rate_divisor = min(100, len(episode_statistics.get('num_crashes', {}).get(spawn_config, [])))
+    config_crash_rate_divisor = min(100, len(episode_statistics.get('num_crashes', {}).get(info['scenario'], [])))
 
     # Get all values with safe defaults
     ep_rew_total = episode_statistics.get('ep_rew_total', [0])
@@ -200,106 +159,48 @@ def log_stats(info, episode_statistics: dict, ego: bool, policy_prefix=None, che
         f"{prefix}/sr100": sum(total_crashes[-crash_rate_divisor:])/max(1, crash_rate_divisor),
         f"{prefix}/ego_speed_mean": ego_speed/episode_duration,
         f"{prefix}/npc_speed_mean": npc_speed/episode_duration,
-        f"{prefix}/spawn_config": spawn_config,
+        f"{prefix}/scenario": info['scenario'],
         f"{prefix}/epsilon": epsilon,
         f"{prefix}/collision_reward": collision_reward/episode_duration,
-        f"{prefix}/{spawn_config}/ego_speed_mean": ego_speed/episode_duration,
-        f"{prefix}/{spawn_config}/npc_speed_mean": npc_speed/episode_duration,
+        f"{prefix}/{info['scenario']}/ego_speed_mean": ego_speed/episode_duration,
+        f"{prefix}/{info['scenario']}/npc_speed_mean": npc_speed/episode_duration,
     }
-
-    # Add custom aggregated metrics if available
-    if aggregated:
-        if 'success_rate' in episode_statistics:
-            wandb_log[f"{prefix}/success_rate"] = episode_statistics['success_rate']
-        if 'avg_reward' in episode_statistics:
-            wandb_log[f"{prefix}/avg_reward"] = episode_statistics['avg_reward']
-        if 'avg_episode_length' in episode_statistics:
-            wandb_log[f"{prefix}/avg_episode_length"] = episode_statistics['avg_episode_length']
-
-        # Add an explicit metric type tag for easier filtering in WandB
-        wandb_log["metric_type"] = "aggregated_summary"
 
     # Only add these metrics if we have crash data for this spawn config
     num_crashes = episode_statistics.get('num_crashes', {})
-    if spawn_config in num_crashes and len(num_crashes[spawn_config]) > 0:
+    if info['scenario'] in num_crashes and len(num_crashes[info['scenario']]) > 0:
         # Get safe crashes for this config and calculate metrics
-        config_crashes = num_crashes[spawn_config]
+        config_crashes = num_crashes[info['scenario']]
         crash_count = sum(config_crashes)
         sr100 = sum(config_crashes[-config_crash_rate_divisor:])/max(1, config_crash_rate_divisor)
 
         wandb_log.update({
-            f"{prefix}/{spawn_config}/num_crashes": crash_count,
-            f"{prefix}/{spawn_config}/sr100": sr100,
-            f"{prefix}/{spawn_config}/collision_reward": collision_reward/episode_duration,
+            f"{prefix}/{info['scenario']}/num_crashes": crash_count,
+            f"{prefix}/{info['scenario']}/sr100": sr100,
+            f"{prefix}/{info['scenario']}/collision_reward": collision_reward/episode_duration,
         })
 
-    # Add scenario information if available
-    scenario = episode_statistics.get('scenario')
-    if scenario:
-        wandb_log[f"{prefix}/scenario"] = scenario
+    # Get the current episode number or checkpoint step
+    current_step = episode_statistics.get('episode_num', 0)
 
-    # Add policy name if available
-    policy_name = episode_statistics.get('policy_name')
-    if policy_name:
-        wandb_log[f"{prefix}/policy"] = policy_name
-
-    # Add specific policy information if available
-    specific_policy_name = episode_statistics.get('specific_policy_name')
-    if specific_policy_name:
-        wandb_log[f"{prefix}/specific_policy"] = specific_policy_name
-
-    # Add policy type if available
-    policy_type = episode_statistics.get('policy_type')
-    if policy_type:
-        wandb_log[f"{prefix}/policy_type"] = policy_type
-
-    if ego:
-        # Get ego-specific rewards with defaults
-        right_lane_reward = episode_statistics.get('right_lane_reward', 0)
-        high_speed_reward = episode_statistics.get('high_speed_reward', 0)
-
-        wandb_log.update({
-                    f"{prefix}/right_lane_reward": right_lane_reward/episode_duration,
-                    f"{prefix}/high_speed_reward": high_speed_reward/episode_duration,
-                    f"{prefix}/{spawn_config}/right_lane_reward": right_lane_reward/episode_duration,
-                    f"{prefix}/{spawn_config}/high_speed_reward": high_speed_reward/episode_duration,
-        })
+    # Add the appropriate step metric to the log dict
+    if step_metric == "checkpoint_step":
+        wandb_log["checkpoint_step"] = current_step
+    elif step_metric == "testing_step":
+        wandb_log["testing_step"] = current_step
     else:
-        # Get NPC-specific rewards with defaults
-        ttc_x_reward = episode_statistics.get('ttc_x_reward', 0)
-        ttc_y_reward = episode_statistics.get('ttc_y_reward', 0)
+        wandb_log["training_step"] = current_step
 
-        wandb_log.update({
-                    f"{prefix}/ttc_x_reward": ttc_x_reward/episode_duration,
-                    f"{prefix}/ttc_y_reward": ttc_y_reward/episode_duration,
-                    f"{prefix}/{spawn_config}/ttc_x_reward": ttc_x_reward/episode_duration,
-                    f"{prefix}/{spawn_config}/ttc_y_reward": ttc_y_reward/episode_duration,
-        })
+    # Add identifiers to clarify metric types and grouping
+    if checkpoint:
+        wandb_log["checkpoint_id"] = checkpoint_step
+        wandb_log["metric_collection"] = "checkpoint_testing" if checkpoint else "checkpoint_summary"
+    else:
+        wandb_log["metric_collection"] = "training"
 
-    try:
-        # Get the current episode number or checkpoint step
-        current_step = episode_statistics.get('episode_num', 0)
+    # Log with custom tags (step is automatically handled by define_metric)
+    wandb.log(wandb_log)
 
-        # Add the appropriate step metric to the log dict
-        if step_metric == "checkpoint_step":
-            wandb_log["checkpoint_step"] = current_step
-        elif step_metric == "testing_step":
-            wandb_log["testing_step"] = current_step
-        else:
-            wandb_log["training_step"] = current_step
-
-        # Add identifiers to clarify metric types and grouping
-        if checkpoint or checkpoint_summary:
-            wandb_log["checkpoint_id"] = checkpoint_step
-            wandb_log["metric_collection"] = "checkpoint_testing" if checkpoint else "checkpoint_summary"
-        else:
-            wandb_log["metric_collection"] = "training"
-
-        # Log with custom tags (step is automatically handled by define_metric)
-        wandb.log(wandb_log)
-    except Exception as e:
-        print(f"Error logging to wandb: {e}")
-        print(f"Attempted to log metrics: {list(wandb_log.keys())}")
 
 def log_checkpoint_summary(all_stats, policy_stats, checkpoint_step, ego=False, specific_policy_stats=None):
     """

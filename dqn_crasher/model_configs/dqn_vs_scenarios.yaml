@@ -19,7 +19,7 @@ policy_B:
 
 frame_stack: 1
 render: False
-train_ego: False
+train_ego: True
 
 # NN
 batch_size: 32
@@ -34,10 +34,11 @@ buffer_type: "ER"
 num_hidden_layers: 1
 hidden_layer: 256
 
+checkpoint_testing_episodes: 10
 testing_episodes: 10
 total_timesteps: 100000
 
 save_trajectories: True
-root_directory: "./test_dqn_vs_scenarios_1stack"
+root_directory: "./dqn_vs_scenarios_1stack"
 trajectory_path: "episodes"
 model_save_path: "models"
