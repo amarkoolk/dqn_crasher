@@ -137,15 +137,12 @@ class MultiAgentRunner:
         stats['checkpoint_testing'] = True
         stats['metrics_type'] = 'checkpoint_episode'
 
-        # Create containers to store all episode stats for later aggregation
-        all_episode_stats = []
-        policy_episode_stats = {}
-        specific_policy_episode_stats = {}
-        policy_stats = {}
-
         scenario_vs_mobil = False
         if isinstance(self.A, policies.PolicyDistribution):
             scenario_vs_mobil = isinstance(self.A.policies[0], policies.ScenarioPolicy)
+
+        if isinstance(self.A, policies.DQNPolicy):
+            self.A.set_train(False)
 
         if scenario_vs_mobil:
             policy_iterate = self.A.policies
@@ -154,13 +151,6 @@ class MultiAgentRunner:
 
 
         for i in range(len(policy_iterate)):
-            policy_name = str(type(policy_iterate[i]).__name__)
-            if policy_name not in policy_stats:
-                policy_stats[policy_name] = helpers.initialize_stats()
-
-            if policy_name not in policy_episode_stats:
-                policy_episode_stats[policy_name] = []
-
             for j in range(total_eps):
                 if scenario_vs_mobil:
                     self.A.reset(i, test = True)
@@ -171,94 +161,11 @@ class MultiAgentRunner:
                 self._set_config()
 
                 # Run the episode
-                # Use a unique offset for each test episode
-                unique_offset = j + (i * total_eps)
-                testing_step = unique_offset + 1  # Start from 1
-
-                # Set counters for different metric types
-                stats['episode_num'] = testing_step
-                stats['testing_step'] = testing_step
                 stats['metrics_type'] = 'checkpoint_episode'
-
-                if policy_name in policy_stats:
-                    policy_stats[policy_name]['episode_num'] = testing_step
-                    policy_stats[policy_name]['testing_step'] = testing_step
-                    policy_stats[policy_name]['metrics_type'] = 'checkpoint_episode'
-
-                episode_results = self._run_episode(train_player=None, t_start=0, stats=stats,
-                                        policy_stats=policy_stats, policy_name=policy_name, pbar=None, checkpoint_step=testing_step)
-
-                # Save a copy of this episode's stats for later aggregation
-                if self.cfg.get('track', False):
-                    # Make a true deep copy of the current stats
-                    episode_stats_copy = copy.deepcopy(stats)
-
-                    # Store the copy for later aggregation
-                    all_episode_stats.append(episode_stats_copy)
-
-                    # Also collect policy-specific stats
-                    if policy_name in policy_stats:
-                        policy_stats_copy = copy.deepcopy(policy_stats[policy_name])
-                        policy_episode_stats[policy_name].append(policy_stats_copy)
-
-                    # Collect specific policy stats
-                    if 'specific_policy_name' in stats and stats['specific_policy_name']:
-                        specific_policy = stats['specific_policy_name']
-
-                        # Get specific policy stats
-                        if 'specific_policy_stats' in globals() and specific_policy in globals()['specific_policy_stats']:
-                            specific_stats_copy = copy.deepcopy(globals()['specific_policy_stats'][specific_policy])
-
-                            # Store in the appropriate collection
-                            if specific_policy not in specific_policy_episode_stats:
-                                specific_policy_episode_stats[specific_policy] = []
-
-                            specific_policy_episode_stats[specific_policy].append(specific_stats_copy)
-
+                episode_results = self._run_episode(train_player=None, t_start=0, stats=stats, pbar=None, checkpoint_step=checkpoint_step)
 
         if self.cfg.get('track', False):
-            # Log overall checkpoint statistics
-            # Use checkpoint step for summary metrics
-            summary_counter = checkpoint_step // self.cfg.get('test_interval', 10000)
-
-            # Log overall checkpoint statistics
-            stats['checkpoint_step'] = summary_counter
-            stats['metrics_type'] = 'checkpoint_summary'
-            log_stats(None, stats, checkpoint=True, checkpoint_step=summary_counter)
-
-            # Log policy-specific statistics at checkpoint
-            for policy_name, policy_stat in policy_stats.items():
-                policy_stat['checkpoint_step'] = summary_counter
-                policy_stat['metrics_type'] = 'checkpoint_summary'
-                log_stats(None, policy_stat, ego=False, policy_prefix=policy_name,
-                          checkpoint=True, checkpoint_step=summary_counter)
-
-            # Aggregate and log summary statistics across all episodes in this checkpoint
-            checkpoint_stats = helpers.aggregate_checkpoint_stats(all_episode_stats, checkpoint_step=summary_counter)
-            checkpoint_stats['metrics_type'] = 'checkpoint_summary'
-
-            # Aggregate policy-specific stats
-            checkpoint_policy_stats = {}
-            for policy_name, episodes in policy_episode_stats.items():
-                # Each policy gets the same summary step to align them in WandB charts
-                checkpoint_policy_stats[policy_name] = helpers.aggregate_checkpoint_stats(episodes, checkpoint_step=summary_counter)
-                checkpoint_policy_stats[policy_name]['metrics_type'] = 'checkpoint_summary'
-
-            # Aggregate specific policy stats
-            specific_policy_checkpoint_stats = {}
-            for specific_policy, episodes in specific_policy_episode_stats.items():
-                if episodes:  # Only aggregate if we have episodes
-                    specific_policy_checkpoint_stats[specific_policy] = helpers.aggregate_checkpoint_stats(episodes, checkpoint_step=summary_counter)
-                    specific_policy_checkpoint_stats[specific_policy]['metrics_type'] = 'checkpoint_summary'
-
-                    # Log the specific policy summary
-                    log_stats(None, specific_policy_checkpoint_stats[specific_policy],
-                              ego=False, policy_prefix=f"specific/{specific_policy}",
-                              checkpoint_summary=True, checkpoint_step=summary_counter)
-
-            log_checkpoint_summary(checkpoint_stats, checkpoint_policy_stats,
-                                  checkpoint_step=summary_counter, ego=False,
-                                  specific_policy_stats=specific_policy_checkpoint_stats)
+            log_checkpoint_summary(stats, checkpoint_step)
 
         self.A.restore_state(save_state[0])
         self.B.restore_state(save_state[1])
@@ -314,6 +221,9 @@ class MultiAgentRunner:
         elif isinstance(self.A, policies.PolicyDistribution):
             if isinstance(self.A.current_policy, policies.ScenarioPolicy):
                 classification_source = self.A
+        else:
+            classification_source = self.B
+
 
         if isinstance(classification_source, policies.PolicyDistribution):
             if isinstance(classification_source.current_policy, policies.ScenarioPolicy):
@@ -399,7 +309,7 @@ class MultiAgentRunner:
             elif metrics_type == 'checkpoint_summary':
                 # For checkpoint summary metrics - use checkpoint_step
                 current_step = stats.get('checkpoint_step', 0)
-                log_stats(info, stats, checkpoint_summary=True, checkpoint_step=current_step)
+                log_stats(info, stats, checkpoint=True, checkpoint_step=current_step)
                 helpers.reset_stats(stats, preserve_episode_num=True)
             elif metrics_type == 'testing':
                 # For evaluation testing - use normal episode numbers
