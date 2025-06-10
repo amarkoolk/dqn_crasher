@@ -15,6 +15,15 @@ class TrajectoryStore(object):
 
         self.file_path = file_path
 
+    def reset_filepath(self, step):
+        file_path = self.file_path[:-6] + f'_{step}' + self.file_path[-6:]
+
+        self.dirpath = os.path.dirname(file_path)
+        if self.dirpath:
+            os.makedirs(self.dirpath, exist_ok=True)
+
+        self.file_path = file_path
+
     def start_episode(self, episode_idx: int):
         """Begin collecting a fresh list of transitions."""
         self.current_episode = episode_idx

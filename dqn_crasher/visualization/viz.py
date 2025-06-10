@@ -299,7 +299,7 @@ def load_visualizer_and_episodes(
     name2 = file2.split('.')[-1] if file2 else 'Opponent'
 
     # Load episodes
-    ep_fn = f'episodes_{file1}.jsonl'
+    ep_fn = f'{file1}.jsonl'
     ep_path = os.path.join(data_dir, ep_fn)
     store = TrajectoryStore(ep_path)
     episodes = store.load(ep_path)
@@ -357,7 +357,7 @@ RELATIVE_MAP = {
 STATE_SLICES = get_state_slices(STATE_SPEC)
 
 
-data_dir = '../mobil_vs_scenarios'
+data_dir = '../dqn_vs_scenarios_1stack/episodes/test'
 scenario = 'scenarios.CutIn'
 mp4_path = os.path.join(data_dir,'mp4s')
 os.makedirs(mp4_path, exist_ok=True)

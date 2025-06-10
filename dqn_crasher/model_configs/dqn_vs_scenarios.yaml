@@ -26,17 +26,18 @@ batch_size: 32
 gamma: 0.8
 start_e: 1.0
 end_e: 0.05
-decay_e: 6000
+decay_e: 60000
 tau: 0.005
 lr: 0.0005
-buffer_size: 15000
+buffer_size: 150000
 buffer_type: "ER"
 num_hidden_layers: 1
 hidden_layer: 256
 
 checkpoint_testing_episodes: 10
 testing_episodes: 10
-total_timesteps: 100000
+total_timesteps: 1000000
+test_interval: 100000
 
 save_trajectories: True
 root_directory: "./dqn_vs_scenarios_1stack"

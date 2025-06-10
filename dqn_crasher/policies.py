@@ -51,6 +51,9 @@ class DQNPolicy(BasePolicy):
         self.test_store : TrajectoryStore = TrajectoryStore(file_path = test_file_path)
         self.train : bool = train
 
+    def set_train(self, train):
+        self.train = train
+
     def reset(self, test = False):
         # nothing to do
         pass

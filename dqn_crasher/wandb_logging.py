@@ -1,4 +1,5 @@
 import wandb
+import numpy as np
 
 def initialize_logging(config, train_ego = None, eval = False, checkpoint = False, npc_pool_size = None, ego_pool_size = None):
     if wandb.run is not None:
@@ -91,13 +92,21 @@ def log_evaluation(args, n_cycle):
     return run
 
 
-def log_stats(info, episode_statistics: dict, policy_prefix=None, checkpoint=False, checkpoint_step=None):
+def log_stats(info, episode_statistics: dict, checkpoint=False, checkpoint_step=None):
 
-    # Add crash data
-    if info['scenario'] not in episode_statistics:
-        episode_statistics['num_crashes'][info['scenario']] = []
+    # Breakdown scenario stats
+    scenario_stat_keys = ['num_crashes', 'episode_rewards', 'episode_duration', 'ego_speed', 'npc_speed', 'ttc_x_reward', 'ttc_y_reward', 'right_lane_reward', 'high_speed_reward', 'collision_reward']
+    for stat in scenario_stat_keys:
+        if stat not in episode_statistics['aggregate']:
+            episode_statistics['aggregate'][stat] = {}
+        if info['scenario'] not in episode_statistics['aggregate'][stat]:
+            episode_statistics['aggregate'][stat][info['scenario']] = []
+        if stat == 'num_crashes':
+            episode_statistics['aggregate'][stat][info['scenario']].append(info['crashed'])
+        else:
+            episode_statistics['aggregate'][stat][info['scenario']].append(episode_statistics[stat]/episode_statistics['episode_duration'])
 
-    episode_statistics['num_crashes'][info['scenario']].append(info['crashed'])
+
     episode_statistics['total_crashes'].append(info['crashed'])
 
     # Calculate episode statistics safely
@@ -126,9 +135,6 @@ def log_stats(info, episode_statistics: dict, policy_prefix=None, checkpoint=Fal
         prefix = "checkpoint"  # Individual checkpoint testing episodes
     else:
         prefix = "training"  # Regular training metrics
-
-    if policy_prefix:
-        prefix = f"{prefix}/{policy_prefix}"
 
     # Determine which step metric to use
     if checkpoint:
@@ -164,6 +170,7 @@ def log_stats(info, episode_statistics: dict, policy_prefix=None, checkpoint=Fal
         f"{prefix}/collision_reward": collision_reward/episode_duration,
         f"{prefix}/{info['scenario']}/ego_speed_mean": ego_speed/episode_duration,
         f"{prefix}/{info['scenario']}/npc_speed_mean": npc_speed/episode_duration,
+        f"{prefix}/{info['scenario']}/crash": int(info['crashed'])
     }
 
     # Only add these metrics if we have crash data for this spawn config
@@ -189,7 +196,7 @@ def log_stats(info, episode_statistics: dict, policy_prefix=None, checkpoint=Fal
     elif step_metric == "testing_step":
         wandb_log["testing_step"] = current_step
     else:
-        wandb_log["training_step"] = current_step
+        wandb_log["training_step"] = episode_statistics.get('training_step', 0)
 
     # Add identifiers to clarify metric types and grouping
     if checkpoint:
@@ -202,111 +209,19 @@ def log_stats(info, episode_statistics: dict, policy_prefix=None, checkpoint=Fal
     wandb.log(wandb_log)
 
 
-def log_checkpoint_summary(all_stats, policy_stats, checkpoint_step, ego=False, specific_policy_stats=None):
-    """
-    Log a summary of checkpoint metrics across all episodes
+def log_checkpoint_summary(stats, checkpoint_step):
 
-    This creates aggregated statistics showing overall performance at a checkpoint,
-    separating them clearly from individual episode metrics with distinct prefixes.
+    prefix = 'checkpoint_summary'
+    wandb_log = {
+        'checkpoint_step': checkpoint_step
+    }
+    scenario_stat_keys = ['num_crashes', 'episode_rewards', 'ego_speed', 'npc_speed', 'ttc_x_reward', 'ttc_y_reward', 'right_lane_reward', 'high_speed_reward', 'collision_reward']
+    for stat in scenario_stat_keys:
+        total_stat = []
+        for scenario in stats['aggregate'][stat]:
+            avg_stat = np.mean(stats['aggregate'][stat][scenario])
+            wandb_log[f'{prefix}/{scenario}/{stat}'] = avg_stat
+            total_stat.append(avg_stat)
+        wandb_log[f'{prefix}/{stat}'] = np.mean(total_stat)
 
-    Args:
-        all_stats: Combined statistics across all episodes
-        policy_stats: Dictionary mapping policy names to their aggregate statistics
-        checkpoint_step: The training step at which this checkpoint was run
-        ego: Whether this is for the ego agent
-        specific_policy_stats: Dictionary mapping specific policy names to their statistics
-    """
-    if not all_stats:
-        print("Warning: Empty statistics provided to log_checkpoint_summary")
-        return
-
-    # Create a deep copy to avoid modifying the original
-    summary_stats = all_stats.copy()
-
-    # Calculate additional summary metrics
-    # These will make the aggregated summary more useful
-    if 'total_crashes' in summary_stats and summary_stats['total_crashes']:
-        success_rate = sum(summary_stats['total_crashes']) / max(1, len(summary_stats['total_crashes']))
-        summary_stats['success_rate'] = success_rate
-
-    if 'ep_rew_total' in summary_stats and summary_stats['ep_rew_total']:
-        avg_reward = sum(summary_stats['ep_rew_total']) / max(1, len(summary_stats['ep_rew_total']))
-        summary_stats['avg_reward'] = avg_reward
-
-    if 'ep_len_total' in summary_stats and summary_stats['ep_len_total']:
-        avg_episode_length = sum(summary_stats['ep_len_total']) / max(1, len(summary_stats['ep_len_total']))
-        summary_stats['avg_episode_length'] = avg_episode_length
-
-    # Add checkpoint metadata for clearer organization
-    summary_stats['checkpoint_step'] = checkpoint_step
-    summary_stats['summary_type'] = 'overall_performance'
-
-    # Set episode number to checkpoint step to ensure proper ordering
-    summary_stats['episode_num'] = checkpoint_step
-
-    # Log the combined stats as a checkpoint summary
-    log_stats(None, summary_stats, ego=ego, checkpoint=False,
-              checkpoint_summary=True, checkpoint_step=checkpoint_step, aggregated=True)
-
-    # Log per-policy summaries
-    if policy_stats:
-        for policy_name, policy_stat in policy_stats.items():
-            if policy_stat:
-                # Create a copy to avoid modifying the original
-                policy_summary = policy_stat.copy()
-
-                # Set episode number to checkpoint step to ensure proper ordering
-                policy_summary['episode_num'] = checkpoint_step
-
-                # Calculate policy-specific summary metrics
-                if 'total_crashes' in policy_summary and policy_summary['total_crashes']:
-                    policy_success_rate = sum(policy_summary['total_crashes']) / max(1, len(policy_summary['total_crashes']))
-                    policy_summary['success_rate'] = policy_success_rate
-
-                if 'ep_rew_total' in policy_summary and policy_summary['ep_rew_total']:
-                    policy_avg_reward = sum(policy_summary['ep_rew_total']) / max(1, len(policy_summary['ep_rew_total']))
-                    policy_summary['avg_reward'] = policy_avg_reward
-
-                if 'ep_len_total' in policy_summary and policy_summary['ep_len_total']:
-                    policy_avg_episode_length = sum(policy_summary['ep_len_total']) / max(1, len(policy_summary['ep_len_total']))
-                    policy_summary['avg_episode_length'] = policy_avg_episode_length
-
-                # Add policy-specific metadata
-                policy_summary['checkpoint_step'] = checkpoint_step
-                policy_summary['policy_name'] = policy_name
-                policy_summary['summary_type'] = 'policy_performance'
-
-                log_stats(None, policy_summary, ego=ego, policy_prefix=policy_name,
-                          checkpoint=False, checkpoint_summary=True,
-                          checkpoint_step=checkpoint_step, aggregated=True)
-
-    # Log specific policy summaries
-    if specific_policy_stats:
-        for specific_policy_name, policy_stat in specific_policy_stats.items():
-            if policy_stat:
-                # Create a copy to avoid modifying the original
-                specific_policy_summary = policy_stat.copy()
-
-                # Calculate policy-specific summary metrics
-                if 'total_crashes' in specific_policy_summary and specific_policy_summary['total_crashes']:
-                    policy_success_rate = sum(specific_policy_summary['total_crashes']) / max(1, len(specific_policy_summary['total_crashes']))
-                    specific_policy_summary['success_rate'] = policy_success_rate
-
-                if 'ep_rew_total' in specific_policy_summary and specific_policy_summary['ep_rew_total']:
-                    policy_avg_reward = sum(specific_policy_summary['ep_rew_total']) / max(1, len(specific_policy_summary['ep_rew_total']))
-                    specific_policy_summary['avg_reward'] = policy_avg_reward
-
-                if 'ep_len_total' in specific_policy_summary and specific_policy_summary['ep_len_total']:
-                    policy_avg_episode_length = sum(specific_policy_summary['ep_len_total']) / max(1, len(specific_policy_summary['ep_len_total']))
-                    specific_policy_summary['avg_episode_length'] = policy_avg_episode_length
-
-                # Add policy-specific metadata
-                specific_policy_summary['checkpoint_step'] = checkpoint_step
-                specific_policy_summary['specific_policy_name'] = specific_policy_name
-                specific_policy_summary['summary_type'] = 'specific_policy_performance'
-
-                # Log with specific policy prefix
-                log_stats(None, specific_policy_summary, ego=ego,
-                          policy_prefix=f"specific/{specific_policy_name}",
-                          checkpoint=False, checkpoint_summary=True,
-                          checkpoint_step=checkpoint_step, aggregated=True)
+    wandb.log(wandb_log)
