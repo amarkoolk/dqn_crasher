@@ -109,8 +109,7 @@ class MultiAgentRunner:
                     self.A.reset(test = True)
                     self.B.reset(i, test = True)
                 self._set_config()
-                _ = self._run_episode(train_player=None, t_start=0, stats=stats,
-                                     policy_stats=policy_stats, policy_name=policy_name, pbar=None)
+                _ = self._run_episode(train_player=None, t_start=0, stats=stats, pbar=None)
                 eps_done += 1
 
                 if pbar is not None:
@@ -143,6 +142,11 @@ class MultiAgentRunner:
 
         if isinstance(self.A, policies.DQNPolicy):
             self.A.set_train(False)
+            self.A.test_store.reset_filepath(checkpoint_step)
+
+        if isinstance(self.B, policies.PolicyDistribution):
+            for policy in self.B.policies:
+                policy.test_store.reset_filepath(checkpoint_step)
 
         if scenario_vs_mobil:
             policy_iterate = self.A.policies
@@ -202,7 +206,7 @@ class MultiAgentRunner:
 
         self.gym_cfg = self.cfg['gym_config']
 
-    def _run_episode(self, train_player, t_start, stats, pbar, policy_stats=None, policy_name=None, checkpoint_step=None):
+    def _run_episode(self, train_player, t_start, stats, pbar, checkpoint_step=None):
         total_timesteps = self.cfg.get('total_timesteps', 100000)
 
         env  = gym.make(self.env_name, config=self.gym_cfg, render_mode="rgb_array")
@@ -230,7 +234,6 @@ class MultiAgentRunner:
                 scenario = str(type(classification_source.current_policy.scenario).__name__)
             elif isinstance(classification_source.current_policy, policies.MobilPolicy):
                 scenario = str(type(classification_source.current_policy).__name__) + '.' + classification_source.current_policy.spawn_configs[0]
-
 
         if self.cfg.get('save_trajectories', False):
             if train_player:
@@ -305,7 +308,7 @@ class MultiAgentRunner:
                 log_stats(info, stats, checkpoint=True, checkpoint_step=current_step)
 
                 # Reset stats but preserve all counters and metadata
-                helpers.reset_stats(stats, preserve_episode_num=True)
+                helpers.reset_stats(stats, preserve_episode_num=False)
             elif metrics_type == 'checkpoint_summary':
                 # For checkpoint summary metrics - use checkpoint_step
                 current_step = stats.get('checkpoint_step', 0)

@@ -13,10 +13,13 @@ class TrajectoryStore(object):
         if self.dirpath:
             os.makedirs(self.dirpath, exist_ok=True)
 
+        self.original_file_path = file_path
         self.file_path = file_path
 
     def reset_filepath(self, step):
-        file_path = self.file_path[:-6] + f'_{step}' + self.file_path[-6:]
+        split = self.original_file_path.split('/')
+        split[-2] += f'_{step}'
+        file_path = os.path.join(*split)
 
         self.dirpath = os.path.dirname(file_path)
         if self.dirpath:
