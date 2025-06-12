@@ -1,9 +1,13 @@
 import wandb
+import os
 import numpy as np
 
 def initialize_logging(config, train_ego = None, eval = False, checkpoint = False, npc_pool_size = None, ego_pool_size = None):
     if wandb.run is not None:
         wandb.finish()
+
+    is_sweep = bool(os.getenv("WANDB_SWEEP_ID"))
+
 
     gym_config = config.get("gym_config", {})
 
@@ -47,16 +51,18 @@ def initialize_logging(config, train_ego = None, eval = False, checkpoint = Fals
     else:
         tags = []
 
+    init_args = {
+        "config": run_config,
+        "tags": tags
+    }
 
-    run = wandb.init(
-            # set the wandb project where this run will be logged
-            project=config.get('wandb_project_name', 'safetyh'),
+    if not is_sweep:
+        init_args["project"] = config.get("wandb_project_name", "safetyh")
 
-            # track hyperparameters and run metadata
-            config=run_config,
+    run = wandb.init(**init_args)
 
-            tags=tags
-        )
+    if is_sweep:
+        config.update(dict(wandb.config))
 
     # Define separate x-axes for different metric types
     # Training metrics use training_step

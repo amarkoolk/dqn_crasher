@@ -47,11 +47,11 @@ class MultiAgentRunner:
         pbar  = tqdm(total=total_timesteps)
 
         if self.cfg.get('track', False):
-            initialize_logging(self.cfg, train_ego=(train_player=="A"))
             stats = helpers.initialize_stats()
 
         if self.cfg.get('save_trajectories', False):
             self.A.store.save_metadata(self.cfg)
+            self.A.test_store.save_metadata(self.cfg)
 
         while t < total_timesteps:
             self.A.reset()
@@ -84,6 +84,7 @@ class MultiAgentRunner:
 
         if self.cfg.get('save_trajectories', False):
             self.A.store.save_metadata(self.cfg)
+            self.A.test_store.save_metadata(self.cfg)
 
         scenario_vs_mobil = isinstance(self.A.policies[0], policies.ScenarioPolicy)
         if scenario_vs_mobil:
@@ -114,11 +115,6 @@ class MultiAgentRunner:
 
                 if pbar is not None:
                     pbar.update(1)
-
-        if self.cfg.get('track', False):
-            # Log policy-specific statistics
-            for policy_name, policy_stat in policy_stats.items():
-                log_stats(None, policy_stat, ego=False, policy_prefix=policy_name)
 
         if pbar: pbar.close()
         wandb.finish()
@@ -274,11 +270,11 @@ class MultiAgentRunner:
             # store trajectories for the  policy
             if self.cfg.get('save_trajectories'):
                 if train_player:
-                    self.A.store.add(transition_A)
-                    self.B.store.add(transition_B)
+                    self.A.store.add(transition_A, info)
+                    self.B.store.add(transition_B, info)
                 else:
-                    self.A.test_store.add(transition_A)
-                    self.B.test_store.add(transition_B)
+                    self.A.test_store.add(transition_A, info)
+                    self.B.test_store.add(transition_B, info)
 
             if train_player:
                 info['eps_threshold'] = self.A.agent.eps_threshold
@@ -317,7 +313,7 @@ class MultiAgentRunner:
             elif metrics_type == 'testing':
                 # For evaluation testing - use normal episode numbers
                 log_stats(info, stats, checkpoint=True)
-                helpers.reset_stats(stats, preserve_episode_num=True)
+                helpers.reset_stats(stats, preserve_episode_num=False)
             else:
                 # Normal training logging - use training_step
                 current_step = stats.get('training_step', 0)

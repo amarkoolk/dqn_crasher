@@ -4,7 +4,16 @@ from typing import Callable
 import importlib
 import numpy as np
 from numba import jit
+import torch
 
+class DeviceHelper:
+    @staticmethod
+    def get(config):
+        if config["device"] == "cuda":
+            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        if config["device"] == "mps":
+            return torch.device("mps"  if torch.backends.mps.is_available() else "cpu")
+        return torch.device("cpu")
 
 def constrain(x, a, b):
     return np.minimum(np.maximum(x, a), b)

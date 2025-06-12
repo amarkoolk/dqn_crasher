@@ -32,7 +32,7 @@ class TrajectoryStore(object):
         self.current_episode = episode_idx
         self.episodes[episode_idx] = []
 
-    def add(self, transition: Transition):
+    def add(self, transition: Transition, info):
         """
         Append a single Transition(state, action, next_state, reward) to the current episode.
         """
@@ -45,6 +45,8 @@ class TrajectoryStore(object):
             "action":     int(transition.action),
             "next_state": None if transition.next_state is None else transition.next_state.tolist(),
             "reward":     float(transition.reward),
+            "ttc_x":      info['ttc_x'],
+            "ttc_y":      info['ttc_y']
         }
         self.episodes[self.current_episode].append(entry)
 
