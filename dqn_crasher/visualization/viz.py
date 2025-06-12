@@ -28,7 +28,8 @@ def get_state_slices(state_spec):
 
 class TrajectoryVisualizer:
     def __init__(self, state_slices, relative_map=None, ego_size=(5,2), npc_size=(5,2),
-                 lane_markings=[(-6, 'solid'), (-2, 'dashed'), (2, 'solid')], entity_names=None, frame_stack=1):
+                 lane_markings=[(-6, 'solid'), (-2, 'dashed'), (2, 'solid')], entity_names=None, frame_stack=1,
+                 color_1 = 'green', color_2 = 'blue'):
         self.slices = state_slices
         self.relative_map = relative_map or {}
         self.ego_size      = ego_size
@@ -43,7 +44,7 @@ class TrajectoryVisualizer:
         else:
             self.display_names = {ent: ent for ent in self.entities}
         # Map colors and sizes per entity (customize as needed)
-        self.color_map = {ent: ('green' if i == 0 else 'blue')
+        self.color_map = {ent: (color_1 if i == 0 else color_2)
                             for i, ent in enumerate(self.entities)}
         self.size_map  = {ent: (ego_size if i == 0 else npc_size)
                             for i, ent in enumerate(self.entities)}
@@ -52,18 +53,20 @@ class TrajectoryVisualizer:
     def load(self, transitions):
         data = self.extract(transitions)
         N = data['action'].shape[0]
-        self.cache.clear()
-        self.cache['N'] = N
+        cache = {}
+        cache['N'] = N
         for ent in self.entities:
             arr = data[ent]
             x, y = arr['x'], arr['y']
-            self.cache[f'{ent}_x'] = x
-            self.cache[f'{ent}_y'] = -y
-            self.cache[f'{ent}_vx'] = arr['vx']
-            self.cache[f'{ent}_vy'] = -arr['vy']
-        self.cache['actions'] = data['action']
-        self.cache['rewards'] = data['reward']
-        return self.cache
+            cache[f'{ent}_x'] = x
+            cache[f'{ent}_y'] = -y
+            cache[f'{ent}_vx'] = arr['vx']
+            cache[f'{ent}_vy'] = -arr['vy']
+        cache['actions'] = data['action']
+        cache['rewards'] = data['reward']
+        cache['ttc_x'] = data['ttc_x']
+        cache['ttc_y'] = data['ttc_y']
+        return cache
 
     def extract(self, transitions):
         raw_states = []
@@ -90,6 +93,8 @@ class TrajectoryVisualizer:
 
         data['action'] = np.array([t['action'] for t in transitions])
         data['reward'] = np.array([t['reward'] for t in transitions])
+        data['ttc_x'] = np.array([t['ttc_x'] for t in transitions])
+        data['ttc_y'] = np.array([t['ttc_y'] for t in transitions])
         return data
 
     def _make_bbox(self, x, y, vx, vy, size, color, alpha):
@@ -117,17 +122,17 @@ class TrajectoryVisualizer:
         N = cache['N']
         ents = self.entities
 
-        fig, (ax0, ax1) = plt.subplots(1, 2, figsize=(18, 6))
+        fig, ax = plt.subplots(3, 2, figsize=(18, 6))
 
         # Bounding boxes
         all_x = np.concatenate([cache[f'{e}_x'] for e in ents])
         all_y = np.concatenate([cache[f'{e}_y'] for e in ents])
         x_min, x_max = all_x.min() - self.ego_size[0], all_x.max() + self.ego_size[0]
         y_min, y_max = all_y.min() - self.ego_size[1], all_y.max() + self.ego_size[1]
-        ax0.set_xlim(x_min, x_max)
-        ax0.set_ylim(y_min, y_max)
+        ax[0,0].set_xlim(x_min, x_max)
+        ax[0,0].set_ylim(y_min, y_max)
         for y_line, style in self.lane_markings:
-            ax0.hlines(y_line, x_min, x_max, colors='k', linestyles=style)
+            ax[0,0].hlines(y_line, x_min, x_max, colors='k', linestyles=style)
         for i in range(N):
             alpha = max(0.2, i / N)
             for e in ents:
@@ -136,26 +141,139 @@ class TrajectoryVisualizer:
                 vx = cache[f'{e}_vx'][i]
                 vy = cache[f'{e}_vy'][i]
                 bbox = self._make_bbox(x, y, vx, vy, self.size_map[e], self.color_map[e], alpha)
-                ax0.add_patch(bbox)
-        ax0.axis('equal')
-        ax0.set_xlabel('X position')
-        ax0.set_ylabel('Y position')
-        ax0.set_title(title or 'Bounding Box Trajectories')
+                ax[0,0].add_patch(bbox)
+        ax[0,0].axis('equal')
+        ax[0,0].set_xlabel('X position')
+        ax[0,0].set_ylabel('Y position')
+        ax[0,0].set_title(title or 'Bounding Box Trajectories')
         box_handles = [patches.Patch(edgecolor=self.color_map[e], facecolor='none', label=self.display_names[e]) for e in ents]
-        ax0.legend(handles=box_handles)
+        ax[0,0].legend(handles=box_handles)
 
         # Velocity
         t = np.arange(N)
         for e in ents:
-            ax1.plot(t, (cache[f'{e}_vx']**2 + cache[f'{e}_vy']**2)**0.5, label=self.display_names[e], color=self.color_map[e])
-        ax1.set_xlabel('Time step')
-        ax1.set_ylabel('Velocity')
-        ax1.set_title('Velocity vs Time')
-        ax1.grid(True)
-        ax1.legend()
+            ax[0,1].plot(t, (cache[f'{e}_vx']**2 + cache[f'{e}_vy']**2)**0.5, label=self.display_names[e], color=self.color_map[e])
+        ax[0,1].set_xlabel('Time step')
+        ax[0,1].set_ylabel('Velocity')
+        ax[0,1].set_title('Velocity vs Time')
+        ax[0,1].grid(True)
+        ax[0,1].legend()
+
+        for e in ents:
+            ax[1,1].plot(t, cache['ttc_x'], label=self.display_names[e], color=self.color_map[e])
+        ax[1,1].set_xlabel('Time step')
+        ax[1,1].set_ylabel('Time to Collision')
+        ax[1,1].set_title('TTC X vs Time')
+        ax[1,1].grid(True)
+        ax[1,1].legend()
+
+        for e in ents:
+            ax[2,1].plot(t, cache['ttc_y'], label=self.display_names[e], color=self.color_map[e])
+        ax[2,1].set_xlabel('Time step')
+        ax[2,1].set_ylabel('Time to Collision')
+        ax[2,1].set_title('TTC Y vs Time')
+        ax[2,1].grid(True)
+        ax[2,1].legend()
 
         plt.tight_layout()
         plt.show()
+
+    @staticmethod
+    def plot_episode_with_bboxes_compare(vis1, transitions1, vis2, transitions2,
+                                        title=None, global_frame=True):
+        """
+        Overlay two runs on the same 3×2 figure using each visualizer's styling.
+        vis1, vis2: TrajectoryVisualizer instances
+        transitions1, transitions2: episode transitions to compare
+        """
+        cache1 = vis1.load(transitions1)
+        cache2 = vis2.load(transitions2)
+        # align lengths
+        N = min(cache1['N'], cache2['N'])
+        # ensure same entities
+        if vis1.entities != vis2.entities:
+            raise ValueError("Both visualizers must share the same entities")
+        ents = vis1.entities
+
+        fig, ax = plt.subplots(3, 2, figsize=(18, 6))
+        # --- Bounding boxes comparison ---
+        # compute global min/max
+        all_x = np.concatenate([
+            cache1[f'{e}_x'][:N] for e in ents
+        ] + [
+            cache2[f'{e}_x'][:N] for e in ents
+        ])
+        all_y = np.concatenate([
+            cache1[f'{e}_y'][:N] for e in ents
+        ] + [
+            cache2[f'{e}_y'][:N] for e in ents
+        ])
+        x_min, x_max = all_x.min() - vis1.ego_size[0], all_x.max() + vis1.ego_size[0]
+        y_min, y_max = all_y.min() - vis1.ego_size[1], all_y.max() + vis1.ego_size[1]
+        ax[0,0].set_xlim(x_min, x_max)
+        ax[0,0].set_ylim(y_min, y_max)
+        for y_line, style in vis1.lane_markings:
+            ax[0,0].hlines(y_line, x_min, x_max, colors='k', linestyles=style)
+        # draw both runs
+        for i in range(N):
+            alpha = max(0.2, i / N)
+            # run1 solid
+            for e in ents:
+                x, y = cache1[f'{e}_x'][i], cache1[f'{e}_y'][i]
+                vx, vy = cache1[f'{e}_vx'][i], cache1[f'{e}_vy'][i]
+                bbox = vis1._make_bbox(x, y, vx, vy, vis1.size_map[e], vis1.color_map[e], alpha)
+                bbox.set_linestyle('-')
+                ax[0,0].add_patch(bbox)
+            # run2 dashed
+            for e in ents:
+                x, y = cache2[f'{e}_x'][i], cache2[f'{e}_y'][i]
+                vx, vy = cache2[f'{e}_vx'][i], cache2[f'{e}_vy'][i]
+                bbox = vis2._make_bbox(x, y, vx, vy, vis2.size_map[e], vis2.color_map[e], alpha)
+                bbox.set_linestyle('-')
+                ax[0,0].add_patch(bbox)
+        ax[0,0].axis('equal')
+        ax[0,0].set_xlabel('X position')
+        ax[0,0].set_ylabel('Y position')
+        ax[0,0].set_title(title or 'Bounding Box Comparison')
+        # ax[0,0].legend([
+        #     patches.Line2D([0],[0], color='black', linestyle='-', label='Run 1'),
+        #     patches.Line2D([0],[0], color='black', linestyle='--', label='Run 2'),
+        # ])
+
+
+
+
+        # --- Velocity comparison ---
+        t = np.arange(N)
+        for e in ents:
+            v1 = np.hypot(cache1[f'{e}_vx'][:N], cache1[f'{e}_vy'][:N])
+            v2 = np.hypot(cache2[f'{e}_vx'][:N], cache2[f'{e}_vy'][:N])
+            ax[0,1].plot(t, v1, label=vis1.display_names[e])
+            ax[0,1].plot(t, v2, label=vis2.display_names[e], linestyle='-')
+        ax[0,1].set_xlabel('Time step')
+        ax[0,1].set_ylabel('Velocity')
+        ax[0,1].set_title('Velocity Comparison')
+        ax[0,1].grid(True)
+        ax[0,1].legend()
+        # --- TTC X comparison ---
+        for cache, vis, ls, lbl in [(cache1, vis1, '-', vis1.display_names['car2']), (cache2, vis2, '-', vis2.display_names['car2'])]:
+            ax[1,1].plot(t, cache['ttc_x'][:N], label=lbl, linestyle=ls)
+        ax[1,1].set_xlabel('Time step')
+        ax[1,1].set_ylabel('TTC X')
+        ax[1,1].set_title('TTC X Comparison')
+        ax[1,1].grid(True)
+        ax[1,1].legend()
+        # --- TTC Y comparison ---
+        for cache, vis, ls, lbl in [(cache1, vis1, '-', vis1.display_names['car2']), (cache2, vis2, '-', vis2.display_names['car2'])]:
+            ax[2,1].plot(t, cache['ttc_y'][:N], label=lbl, linestyle=ls)
+        ax[2,1].set_xlabel('Time step')
+        ax[2,1].set_ylabel('TTC Y')
+        ax[2,1].set_title('TTC Y Comparison')
+        ax[2,1].grid(True)
+        ax[2,1].legend()
+        plt.tight_layout()
+        plt.show()
+
 
     def animate_episode(self, transitions, title=None, interval=1000, repeat=False, save_path=None):
         cache = self.load(transitions)
@@ -261,7 +379,9 @@ def load_visualizer_and_episodes(
     ego_size=(5, 2),
     npc_size=(5, 2),
     lane_markings=None,
-    scenario=None
+    scenario=None,
+    color_1 = 'green',
+    color_2 = 'blue'
 ):
     # Load metadata and frame_stack
     meta_path = os.path.join(data_dir, 'metadata.json')
@@ -312,38 +432,11 @@ def load_visualizer_and_episodes(
         npc_size=npc_size,
         lane_markings=lane_markings or [],
         entity_names=entity_names,
-        frame_stack=frame_stack
+        frame_stack=frame_stack,
+        color_1 = color_1,
+        color_2 = color_2
     )
     return vis, episodes, name1, name2
-
-
-# data_dir = '../mobil_vs_scenarios'
-# with open(os.path.join(data_dir, 'metadata.json')) as f:
-#     metadata = json.load(f)
-
-# scenario_policies = None
-# policy_A_name = None
-# policy_B_name = None
-# if len(metadata['policy_A']) > 1:
-#     scenario_policies = metadata['policy_A']
-#     policy_A_name = 'Scenario'
-# elif len(metadata['policy_B']) > 1:
-#     scenario_policy = metadata['policy_B']
-#     policy_B_name = 'Scenario'
-
-# if policy_A_name is not None:
-#     policy_B_name = metadata['policy_B'][0].split('.')[1]
-# elif policy_B_name is not None:
-#     policy_A_name = metadata['policy_A'][0].split('.')[1]
-
-# # Example usage:
-# scenario_name = metadata['policy_A'][0]
-# store = TrajectoryStore(os.path.join(data_dir, 'episodes_' + scenario_name + '.jsonl'))
-# episodes = store.load(os.path.join(data_dir, 'episodes_' + scenario_name + '.jsonl'))
-# vis = TrajectoryVisualizer(STATE_SLICES, None, entity_names={'car1': scenario_name, 'car2': policy_B_name})
-# vis.plot_episode_with_bboxes(episodes[2], title=f"{scenario_name} vs {policy_B_name}")
-# anim = vis.animate_episode(episodes[2], title = f'{scenario_name} vs {policy_B_name}', interval=1000)
-# plt.show()
 
 
 # Example usage:
@@ -357,12 +450,13 @@ RELATIVE_MAP = {
 STATE_SLICES = get_state_slices(STATE_SPEC)
 
 
-data_dir = '../dqn_vs_scenarios_1stack/episodes/test'
+data_dir1 = '../mobil_vs_scenarios/episodes/test'
+data_dir2 = '../dqn_vs_scenarios_5stack/episodes/test_100000'
 scenario = 'scenarios.CutIn'
-mp4_path = os.path.join(data_dir,'mp4s')
+mp4_path = os.path.join(data_dir1,'mp4s')
 os.makedirs(mp4_path, exist_ok=True)
-vis, episodes, name1, name2 = load_visualizer_and_episodes(
-    data_dir,
+vis, episodes, name11, name21 = load_visualizer_and_episodes(
+    data_dir1,
     STATE_SLICES,
     relative_map=RELATIVE_MAP,
     ego_size=(5,2),
@@ -371,8 +465,28 @@ vis, episodes, name1, name2 = load_visualizer_and_episodes(
     scenario=scenario
 )
 
+
+vis2, episodes2, name12, name22 = load_visualizer_and_episodes(
+    data_dir2,
+    STATE_SLICES,
+    relative_map=RELATIVE_MAP,
+    ego_size=(5,2),
+    npc_size=(5,2),
+    lane_markings=[(-6,'solid'),(-2,'dashed'),(2,'solid')],
+    scenario=scenario,
+    color_1 = 'green',
+    color_2 = 'red'
+)
+
+
+ep_key = list(episodes.keys())[0]
+
+transition1 = episodes[ep_key]
+transition2 = episodes2[ep_key]
+
+
 for i in range(len(list(episodes.keys()))):
     key = list(episodes.keys())[i]
-    vis.plot_episode_with_bboxes(episodes[key], title=f"{name1} vs {name2}")
-    # save_path = os.path.join(mp4_path, f'{scenario}_episode_{key}.mp4')
-    # anim = vis.animate_episode(episodes[key], title=f"{name1} vs {name2}", save_path = save_path)
+    transition1 = episodes[ep_key]
+    transition2 = episodes2[ep_key]
+    TrajectoryVisualizer.plot_episode_with_bboxes_compare(vis, transition1, vis2, transition2)

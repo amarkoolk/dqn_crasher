@@ -1,0 +1,16 @@
+program: main.py
+
+method: bayes
+
+metric:
+  name: checkpoint_summary/num_crashes
+  goal: maximize
+
+# Hyperparameters to sweep
+parameters:
+  batch_size:
+    values: [32, 64, 128]
+  num_hidden_layers:
+    values: [1, 2, 4, 8]
+  hidden_layer:
+    values: [256, 512, 1028]

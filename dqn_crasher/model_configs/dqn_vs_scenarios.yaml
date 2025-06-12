@@ -17,12 +17,12 @@ policy_B:
   - policies.MobilPolicy.forward_left
   - policies.MobilPolicy.forward_right
 
-frame_stack: 1
+frame_stack: 5
 render: False
 train_ego: True
 
 # NN
-batch_size: 32
+batch_size: 128
 gamma: 0.8
 start_e: 1.0
 end_e: 0.05
@@ -31,15 +31,15 @@ tau: 0.005
 lr: 0.0005
 buffer_size: 150000
 buffer_type: "ER"
-num_hidden_layers: 1
-hidden_layer: 256
+num_hidden_layers: 4
+hidden_layer: 512
 
 checkpoint_testing_episodes: 10
 testing_episodes: 10
 total_timesteps: 1000000
-test_interval: 100000
+test_interval: 20000
 
 save_trajectories: True
-root_directory: "./dqn_vs_scenarios_1stack"
+root_directory: "./sweep_dqn_vs_scenarios_5stack"
 trajectory_path: "episodes"
 model_save_path: "models"
