@@ -1,15 +1,18 @@
 program: main.py
 
-method: grid
+method: bayes
 
 metric:
-  name: checkpoint_summary/num_crashes
+  name: checkpoint_summary/episode_rewards
   goal: maximize
 
 # Hyperparameters to sweep
 parameters:
+  lr:
+    min: 0.00001
+    max: 0.01
   batch_size:
-    values: [32, 64, 128, 256, 512]
+    values: [128, 256, 512]
   num_hidden_layers:
     values: [1, 2, 4, 8]
   hidden_layer:

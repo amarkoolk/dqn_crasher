@@ -21,7 +21,9 @@ if __name__=="__main__":
     gym_config = load_config("env_configs/multi_agent.yaml")
     gym_config['adversarial'] = False
     gym_config['normalize_reward'] = True
-    gym_config['collision_reward'] = -100
+    gym_config['collision_reward'] = -1
+    gym_config['ttc_x_reward'] = 0
+    gym_config['ttc_y_reward'] = 0
     gym_config['observation']['observation_config']['frame_stack'] = config['frame_stack']
     config['spawn_config'] = gym_config['spawn_configs']
     config['gym_config'] = gym_config
@@ -30,7 +32,7 @@ if __name__=="__main__":
 
     is_sweep = bool(os.getenv("WANDB_SWEEP_ID"))
     if is_sweep:
-        config['root_directory'] = os.path.join(config['root_directory'], f"{config['batch_size']}_{config['num_hidden_layers']}_{config['hidden_layer']}")
+        config['root_directory'] = os.path.join(config['root_directory'], f"{config['lr']}_{config['batch_size']}_{config['num_hidden_layers']}_{config['hidden_layer']}")
 
 
     device = utils.DeviceHelper.get(config)

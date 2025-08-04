@@ -3,7 +3,7 @@ seed: 42
 env_name: "crash-v0"
 architecture: "DQN"
 track: True
-device: "cpu"
+device: "cuda"
 
 policy_A:
   - policies.DQNPolicy
@@ -40,6 +40,6 @@ total_timesteps: 1000000
 test_interval: 20000
 
 save_trajectories: True
-root_directory: "./sweep_dqn_vs_scenarios_5stack"
+root_directory: "/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize"
 trajectory_path: "episodes"
 model_save_path: "models"

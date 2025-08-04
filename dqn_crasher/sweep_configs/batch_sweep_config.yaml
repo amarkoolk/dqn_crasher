@@ -9,7 +9,7 @@ metric:
 # Hyperparameters to sweep
 parameters:
   batch_size:
-    values: [32, 64, 128, 256, 512]
+    values: [128, 256, 512]
   num_hidden_layers:
     values: [1, 2, 4, 8]
   hidden_layer:

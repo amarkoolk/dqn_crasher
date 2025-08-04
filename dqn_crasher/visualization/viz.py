@@ -180,99 +180,153 @@ class TrajectoryVisualizer:
 
     @staticmethod
     def plot_episode_with_bboxes_compare(vis1, transitions1, vis2, transitions2,
-                                        title=None, global_frame=True):
+                                     title=None, global_frame=True, save_file=None):
         """
-        Overlay two runs on the same 3×2 figure using each visualizer's styling.
-        vis1, vis2: TrajectoryVisualizer instances
-        transitions1, transitions2: episode transitions to compare
+        Overlay two runs on the same figure:
+        – bounding‐box plot on a long top panel
+        – velocity, reward, TTC X and TTC Y in a 2×2 grid below
         """
         cache1 = vis1.load(transitions1)
         cache2 = vis2.load(transitions2)
-        # align lengths
         N = min(cache1['N'], cache2['N'])
-        # ensure same entities
+
         if vis1.entities != vis2.entities:
             raise ValueError("Both visualizers must share the same entities")
         ents = vis1.entities
 
-        fig, ax = plt.subplots(3, 2, figsize=(18, 6))
-        # --- Bounding boxes comparison ---
-        # compute global min/max
-        all_x = np.concatenate([
-            cache1[f'{e}_x'][:N] for e in ents
-        ] + [
-            cache2[f'{e}_x'][:N] for e in ents
-        ])
-        all_y = np.concatenate([
-            cache1[f'{e}_y'][:N] for e in ents
-        ] + [
-            cache2[f'{e}_y'][:N] for e in ents
-        ])
-        x_min, x_max = all_x.min() - vis1.ego_size[0], all_x.max() + vis1.ego_size[0]
-        y_min, y_max = all_y.min() - vis1.ego_size[1], all_y.max() + vis1.ego_size[1]
-        ax[0,0].set_xlim(x_min, x_max)
-        ax[0,0].set_ylim(y_min, y_max)
+        # create figure with 3 rows, 2 cols; top row is twice as tall
+        fig = plt.figure(figsize=(18, 10))
+        gs  = fig.add_gridspec(3, 2, height_ratios=[2, 1, 1], hspace=0.4)
+
+        # top: bounding boxes
+        ax_bbox = fig.add_subplot(gs[0, :])
+
+        # compute global bb limits
+        all_x = np.concatenate([cache1[f'{e}_x'][:N] for e in ents] +
+                            [cache2[f'{e}_x'][:N] for e in ents])
+        all_y = np.concatenate([cache1[f'{e}_y'][:N] for e in ents] +
+                            [cache2[f'{e}_y'][:N] for e in ents])
+        x_min = all_x.min() - vis1.ego_size[0]
+        x_max = all_x.max() + vis1.ego_size[0]
+        y_min = all_y.min() - vis1.ego_size[1]
+        y_max = all_y.max() + vis1.ego_size[1]
+
+        ax_bbox.set_xlim(x_min, x_max)
+        ax_bbox.set_ylim(y_min, y_max)
+        x_range = x_max - x_min
+        y_range = y_max - y_min
+        pad_x = 0.1 * x_range
+        pad_y = 0.1 * y_range
+        ax_bbox.set_xlim(x_min - pad_x, x_max + pad_x)
+        ax_bbox.set_ylim(y_min - pad_y, y_max + pad_y)
         for y_line, style in vis1.lane_markings:
-            ax[0,0].hlines(y_line, x_min, x_max, colors='k', linestyles=style)
-        # draw both runs
+            ax_bbox.hlines(y_line, x_min, x_max, colors='k', linestyles=style)
+
+        # draw bounding‐boxes frame by frame
         for i in range(N):
             alpha = max(0.2, i / N)
             # run1 solid
+            seen = set()
             for e in ents:
+                name = vis1.display_names[e]
+                if name in seen: continue
+                seen.add(name)
                 x, y = cache1[f'{e}_x'][i], cache1[f'{e}_y'][i]
                 vx, vy = cache1[f'{e}_vx'][i], cache1[f'{e}_vy'][i]
-                bbox = vis1._make_bbox(x, y, vx, vy, vis1.size_map[e], vis1.color_map[e], alpha)
-                bbox.set_linestyle('-')
-                ax[0,0].add_patch(bbox)
+                bb = vis1._make_bbox(x, y, vx, vy, vis1.size_map[e], vis1.color_map[e], alpha)
+                bb.set_linestyle('-')
+                ax_bbox.add_patch(bb)
             # run2 dashed
             for e in ents:
+                name = vis2.display_names[e]
+                if name in seen: continue
+                seen.add(name)
                 x, y = cache2[f'{e}_x'][i], cache2[f'{e}_y'][i]
                 vx, vy = cache2[f'{e}_vx'][i], cache2[f'{e}_vy'][i]
-                bbox = vis2._make_bbox(x, y, vx, vy, vis2.size_map[e], vis2.color_map[e], alpha)
-                bbox.set_linestyle('-')
-                ax[0,0].add_patch(bbox)
-        ax[0,0].axis('equal')
-        ax[0,0].set_xlabel('X position')
-        ax[0,0].set_ylabel('Y position')
-        ax[0,0].set_title(title or 'Bounding Box Comparison')
-        # ax[0,0].legend([
-        #     patches.Line2D([0],[0], color='black', linestyle='-', label='Run 1'),
-        #     patches.Line2D([0],[0], color='black', linestyle='--', label='Run 2'),
-        # ])
+                bb = vis2._make_bbox(x, y, vx, vy, vis2.size_map[e], vis2.color_map[e], alpha)
+                bb.set_linestyle('--')
+                ax_bbox.add_patch(bb)
 
-
-
-
-        # --- Velocity comparison ---
-        t = np.arange(N)
+        # trajectories
         for e in ents:
-            v1 = np.hypot(cache1[f'{e}_vx'][:N], cache1[f'{e}_vy'][:N])
-            v2 = np.hypot(cache2[f'{e}_vx'][:N], cache2[f'{e}_vy'][:N])
-            ax[0,1].plot(t, v1, label=vis1.display_names[e])
-            ax[0,1].plot(t, v2, label=vis2.display_names[e], linestyle='-')
-        ax[0,1].set_xlabel('Time step')
-        ax[0,1].set_ylabel('Velocity')
-        ax[0,1].set_title('Velocity Comparison')
-        ax[0,1].grid(True)
-        ax[0,1].legend()
-        # --- TTC X comparison ---
-        for cache, vis, ls, lbl in [(cache1, vis1, '-', vis1.display_names['car2']), (cache2, vis2, '-', vis2.display_names['car2'])]:
-            ax[1,1].plot(t, cache['ttc_x'][:N], label=lbl, linestyle=ls)
-        ax[1,1].set_xlabel('Time step')
-        ax[1,1].set_ylabel('TTC X')
-        ax[1,1].set_title('TTC X Comparison')
-        ax[1,1].grid(True)
-        ax[1,1].legend()
-        # --- TTC Y comparison ---
-        for cache, vis, ls, lbl in [(cache1, vis1, '-', vis1.display_names['car2']), (cache2, vis2, '-', vis2.display_names['car2'])]:
-            ax[2,1].plot(t, cache['ttc_y'][:N], label=lbl, linestyle=ls)
-        ax[2,1].set_xlabel('Time step')
-        ax[2,1].set_ylabel('TTC Y')
-        ax[2,1].set_title('TTC Y Comparison')
-        ax[2,1].grid(True)
-        ax[2,1].legend()
-        plt.tight_layout()
-        plt.show()
+            ax_bbox.plot(cache1[f'{e}_x'], cache1[f'{e}_y'], color=vis1.color_map[e],
+                        label=vis1.display_names[e])
+            ax_bbox.plot(cache2[f'{e}_x'], cache2[f'{e}_y'], linestyle='--',
+                        color=vis2.color_map[e], label=vis2.display_names[e])
+        ax_bbox.set_aspect('equal', 'box')
+        # ax_bbox.set_aspect(10.0, adjustable='box')
+        ax_bbox.set_xlabel('X position')
+        ax_bbox.set_ylabel('Y position')
+        ax_bbox.set_title(title or 'Trajectory History')
+        ax_bbox.legend()
+
+        # bottom-left: velocity
+        ax_vel = fig.add_subplot(gs[1, 0])
+        t = np.arange(N)
+        seen = set()
+        # for e in ents:
+        #     name = vis1.display_names[e]
+        #     if name in seen: continue
+        #     seen.add(name)
+        #     v1 = np.hypot(cache1[f'{e}_vx'][:N], cache1[f'{e}_vy'][:N])
+        #     ax_vel.plot(t, v1, label=name, color=vis1.color_map[e])
+        #     v2 = np.hypot(cache2[f'{e}_vx'][:N], cache2[f'{e}_vy'][:N])
+        #     ax_vel.plot(t, v2, linestyle='--', label = name, color=vis2.color_map[e])
+
+        seen = set()
+        for e in ents:
+            if vis1.display_names[e] in seen:
+                continue
+            else:
+                seen.add(vis1.display_names[e])
+                v1 = np.hypot(cache1[f'{e}_vx'][:N], cache1[f'{e}_vy'][:N])
+                ax_vel.plot(t, v1, label=vis1.display_names[e], color=vis1.color_map[e])
+            if vis2.display_names[e] in seen:
+                continue
+            else:
+                seen.add(vis2.display_names[e])
+                v2 = np.hypot(cache2[f'{e}_vx'][:N], cache2[f'{e}_vy'][:N])
+                ax_vel.plot(t, v2, label = vis2.display_names[e], color=vis2.color_map[e])
+        ax_vel.set_xlabel('Time step')
+        ax_vel.set_ylabel('Velocity')
+        ax_vel.set_title('Velocity Comparison')
+        ax_vel.grid(True)
+        ax_vel.legend()
+
+        # bottom-right: reward
+        ax_rew = fig.add_subplot(gs[1, 1])
+        ax_rew.plot(t, cache1['rewards'][:N],    label=vis1.display_names['car2'], color=vis1.color_map['car2'])
+        ax_rew.plot(t, cache2['rewards'][:N],    label=vis2.display_names['car2'], color=vis2.color_map['car2'])
+        ax_rew.set_xlabel('Time step')
+        ax_rew.set_ylabel('Reward')
+        ax_rew.set_title('Reward Comparison')
+        ax_rew.grid(True)
+        ax_rew.legend()
+
+        # bottom row left: TTC X
+        ax_ttc_x = fig.add_subplot(gs[2, 0])
+        ax_ttc_x.plot(t, cache1['ttc_x'][:N], label=vis1.display_names['car2'], color=vis1.color_map['car2'])
+        ax_ttc_x.plot(t, cache2['ttc_x'][:N], label=vis2.display_names['car2'], color=vis2.color_map['car2'])
+        ax_ttc_x.set_xlabel('Time step')
+        ax_ttc_x.set_ylabel('TTC X')
+        ax_ttc_x.set_title('TTC X Comparison')
+        ax_ttc_x.grid(True)
+        ax_ttc_x.legend()
+
+        # bottom row right: TTC Y
+        ax_ttc_y = fig.add_subplot(gs[2, 1])
+        ax_ttc_y.plot(t, cache1['ttc_y'][:N], label=vis1.display_names['car2'], color=vis1.color_map['car2'])
+        ax_ttc_y.plot(t, cache2['ttc_y'][:N], label=vis2.display_names['car2'], color=vis2.color_map['car2'])
+        ax_ttc_y.set_xlabel('Time step')
+        ax_ttc_y.set_ylabel('TTC Y')
+        ax_ttc_y.set_title('TTC Y Comparison')
+        ax_ttc_y.grid(True)
+        ax_ttc_y.legend()
+
+        if save_file:
+            plt.savefig(save_file,bbox_inches='tight')
+        else:
+            plt.show()
 
 
     def animate_episode(self, transitions, title=None, interval=1000, repeat=False, save_path=None):
@@ -451,7 +505,7 @@ STATE_SLICES = get_state_slices(STATE_SPEC)
 
 
 data_dir1 = '../mobil_vs_scenarios/episodes/test'
-data_dir2 = '../dqn_vs_scenarios_5stack/episodes/test_100000'
+data_dir2 = '../sweep_5stack_batch_size/256_8_512/episodes/test_1000000'
 scenario = 'scenarios.CutIn'
 mp4_path = os.path.join(data_dir1,'mp4s')
 os.makedirs(mp4_path, exist_ok=True)
@@ -484,9 +538,31 @@ ep_key = list(episodes.keys())[0]
 transition1 = episodes[ep_key]
 transition2 = episodes2[ep_key]
 
+save_file = os.path.join(data_dir2, f"{scenario}.pdf")
 
-for i in range(len(list(episodes.keys()))):
-    key = list(episodes.keys())[i]
-    transition1 = episodes[ep_key]
-    transition2 = episodes2[ep_key]
-    TrajectoryVisualizer.plot_episode_with_bboxes_compare(vis, transition1, vis2, transition2)
+TrajectoryVisualizer.plot_episode_with_bboxes_compare(vis, transition1, vis2, transition2)
+
+
+
+# data_dir2 = '../sweep_5stack_batch_size/256_2_512/episodes/test_940025'
+# scenario = 'policies.MobilPolicy.behind_left'
+# mp4_path = os.path.join(data_dir1,'mp4s')
+# os.makedirs(mp4_path, exist_ok=True)
+
+# vis2, episodes2, name12, name22 = load_visualizer_and_episodes(
+#     data_dir2,
+#     STATE_SLICES,
+#     relative_map=RELATIVE_MAP,
+#     ego_size=(5,2),
+#     npc_size=(5,2),
+#     lane_markings=[(-6,'solid'),(-2,'dashed'),(2,'solid')],
+#     scenario=scenario,
+#     color_1 = 'green',
+#     color_2 = 'red'
+# )
+
+
+# ep_key = list(episodes2.keys())[0]
+# transition2 = episodes2[ep_key]
+# save_file = os.path.join(data_dir2, f"{scenario}.pdf")
+# vis2.plot_episode_with_bboxes(transition2)
