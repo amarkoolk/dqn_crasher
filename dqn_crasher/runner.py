@@ -245,8 +245,11 @@ class MultiAgentRunner:
 
         while not done and t < total_timesteps:
 
-            a_A = self.A.select_action(ego_s, npc_s, t)
-            a_B = self.B.select_action(npc_s, ego_s, t)
+            action_logits_A = self.A.select_action(ego_s, npc_s, t)
+            action_logits_B = self.B.select_action(npc_s, ego_s, t)
+
+            a_A = torch.argmax(action_logits_A)
+            a_B = torch.argmax(action_logits_B)
 
             actions = (a_A.cpu().numpy(), a_B.cpu().numpy())
 
@@ -260,6 +263,11 @@ class MultiAgentRunner:
             next_A, next_B = helpers.obs_to_state(obs, self.n_obs, self.dev, frame_stack = self.cfg['frame_stack'])
             transition_A = Transition(ego_s, a_A, next_A, torch.tensor(reward, device=self.dev))
             transition_B = Transition(npc_s, a_B, next_B, torch.tensor(reward, device=self.dev))
+
+
+            store_transition_A = Transition(ego_s, action_logits_A, next_A, torch.tensor(reward, device=self.dev))
+            store_transition_B = Transition(ego_s, action_logits_B, next_A, torch.tensor(reward, device=self.dev))
+
             ego_s = self.A.update(transition_A, term)
             npc_s = self.B.update(transition_B, term)
 
@@ -270,11 +278,11 @@ class MultiAgentRunner:
             # store trajectories for the  policy
             if self.cfg.get('save_trajectories'):
                 if train_player:
-                    self.A.store.add(transition_A, info)
-                    self.B.store.add(transition_B, info)
+                    self.A.store.add(store_transition_A, info)
+                    self.B.store.add(store_transition_B, info)
                 else:
-                    self.A.test_store.add(transition_A, info)
-                    self.B.test_store.add(transition_B, info)
+                    self.A.test_store.add(store_transition_A, info)
+                    self.B.test_store.add(store_transition_B, info)
 
             if train_player:
                 info['eps_threshold'] = self.A.agent.eps_threshold

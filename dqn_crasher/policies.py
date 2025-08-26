@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import random
 import helpers
 from abc import ABC, abstractmethod
@@ -103,10 +104,11 @@ class DQNPolicy(BasePolicy):
 
 
 class ScenarioPolicy(BasePolicy):
-    def __init__(self, scenario_class, len_obs, config):
+    def __init__(self, scenario_class, len_obs, config, action_space = 5):
         self.scenario          = scenario_class(use_spawn_distribution = config.get('train_ego',False))
         self.len_obs           = len_obs
         self.agent             = None
+        self.action_space      = action_space
         class_name = type(self.scenario).__module__ + "." + type(self.scenario).__name__
         trajectory_save_path = os.path.join(config.get('root_directory', './'), config.get('trajectory_path', './trajectories'),'train', f'{class_name}.jsonl')
         test_trajectory_save_path = os.path.join(config.get('root_directory', './'), config.get('trajectory_path', './trajectories'),'test',f'{class_name}.jsonl')
@@ -125,7 +127,9 @@ class ScenarioPolicy(BasePolicy):
 
     def select_action(self, own_state, other_state, t_step=None):
         action = self.scenario.get_action()
-        return torch.squeeze(torch.tensor([action])).view(1, 1)
+        sampled_action_tensor = torch.tensor(np.zeros((1, self.action_space)), dtype=torch.long)
+        sampled_action_tensor[0,int(action)] = 1.0
+        return sampled_action_tensor
 
     def update(self, transition: Transition, done):
         next_state = transition.next_state
@@ -151,7 +155,7 @@ class ScenarioPolicy(BasePolicy):
 
 class MobilPolicy(BasePolicy):
 
-    def __init__(self, trajectory_store_dir, spawn_configs):
+    def __init__(self, trajectory_store_dir, spawn_configs, action_space = 5):
         self.agent = None
         self.spawn_configs = spawn_configs
         class_name = type(self).__module__ + "." + type(self).__name__
@@ -160,6 +164,7 @@ class MobilPolicy(BasePolicy):
         test_file_path = os.path.join(trajectory_store_dir, 'test', f'{class_name}.{spawn_name}.jsonl')
         self.store : TrajectoryStore = TrajectoryStore(file_path = train_file_path)
         self.test_store : TrajectoryStore = TrajectoryStore(file_path = test_file_path)
+        self.action_space      = action_space
 
     def reset(self, test = False):
         pass
@@ -175,7 +180,8 @@ class MobilPolicy(BasePolicy):
         config['gym_config']['other_vehicles'] = 1
 
     def select_action(self, own_state, other_state, t_step=None):
-        return torch.squeeze(torch.tensor([0])).view(1, 1)
+        sampled_action_tensor = torch.tensor(np.zeros((1, self.action_space)), dtype=torch.long)
+        return sampled_action_tensor
 
     def update(self, transition: Transition, done):
         return transition.next_state

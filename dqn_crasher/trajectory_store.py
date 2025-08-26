@@ -15,15 +15,19 @@ class TrajectoryStore(object):
 
         self.original_file_path = file_path
         self.file_path = file_path
+        self.metadata = None
 
     def reset_filepath(self, step):
         split = self.original_file_path.split('/')
-        split[-2] += f'_{step}'
+        split[-2] += f'/{step}'
         file_path = os.path.join(*split)
+        file_path = '/' + file_path
 
         self.dirpath = os.path.dirname(file_path)
         if self.dirpath:
             os.makedirs(self.dirpath, exist_ok=True)
+
+        self.save_metadata(self.metadata)
 
         self.file_path = file_path
 
@@ -42,7 +46,7 @@ class TrajectoryStore(object):
         # Convert numpy arrays to lists, ints/floats to native types
         entry = {
             "state":      transition.state.tolist(),
-            "action":     int(transition.action),
+            "action":     transition.action.tolist(),
             "next_state": None if transition.next_state is None else transition.next_state.tolist(),
             "reward":     float(transition.reward),
             "ttc_x":      info['ttc_x'],
@@ -72,6 +76,8 @@ class TrajectoryStore(object):
         self.current_episode = None
 
     def save_metadata(self, config : dict):
+        if self.metadata is None:
+            self.metadata = config
         metadata_file = os.path.join(self.dirpath, 'metadata.json')
         with open(metadata_file, 'w') as f:
             json.dump(config, f)

@@ -92,11 +92,14 @@ class DQN_Agent(object):
             # t.max(1) will return the largest column value of each row.
             # second column on max result is index of where max element was
             # found, so we pick action with the larger expected reward.
-            return self.predict(state)
+            action_logit = self.policy_net(state)
+            return action_logit
         else:
 
             sampled_action = self.action_space.sample()
-            return torch.tensor(np.array([[sampled_action]]), device=self.device, dtype=torch.long)
+            sampled_action_tensor = torch.tensor(np.zeros((1, self.action_space.n)), device = self.device, dtype=torch.long)
+            sampled_action_tensor[0,int(sampled_action)] = 1.0
+            return sampled_action_tensor
 
     def optimize_model(self):
         if len(self.memory) < self.batch_size:
@@ -165,7 +168,7 @@ class DQN_Agent(object):
 
     @torch.no_grad
     def predict(self, state):
-        return torch.argmax(self.policy_net(state))
+        return self.policy_net(state)
 
     def update(self, state, action, next_state, reward, terminated):
 

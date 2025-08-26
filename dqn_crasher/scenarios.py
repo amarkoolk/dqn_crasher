@@ -21,6 +21,9 @@ class Scenario:
 
     def set_state(self, ego_state: np.ndarray, npc_state: np.ndarray):
 
+        # print(f"Ego State: {ego_state}")
+        # print(f"NPC State: {npc_state}")
+
         sliced_ego_state = ego_state[0, -10:]
         sliced_npc_state = npc_state[0, -10:]
 
