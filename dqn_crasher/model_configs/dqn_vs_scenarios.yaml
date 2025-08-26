@@ -22,24 +22,24 @@ render: False
 train_ego: True
 
 # NN
-batch_size: 128
+batch_size: 512
 gamma: 0.8
 start_e: 1.0
 end_e: 0.05
 decay_e: 60000
 tau: 0.005
-lr: 0.0005
+lr: 0.00002
 buffer_size: 150000
 buffer_type: "ER"
-num_hidden_layers: 4
-hidden_layer: 512
+num_hidden_layers: 2
+hidden_layer: 1028
 
 checkpoint_testing_episodes: 10
 testing_episodes: 10
 total_timesteps: 1000000
-test_interval: 20000
+test_interval: 10000
 
 save_trajectories: True
-root_directory: "/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize"
+root_directory: "/p/crash/best_sweep_rerun"
 trajectory_path: "episodes"
 model_save_path: "models"

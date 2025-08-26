@@ -36,7 +36,7 @@ observation:
     normalize: False
     see_behind: True
     absolute: True
-    vehicles_count: 2
+    vehicles_count: 5
   type: MultiAgentObservation
 policy_frequency: 1
 vehicles_count: 0

@@ -13,21 +13,4 @@ module purge
 module load anaconda3
 source activate safetyh
 
-# the sweep you want to run
-SWEEP_ID="amar-research/sweep_10m_steps/oqlgsygl"
-
-# how many parallel agents (and thus runs) to spin up on that one GPU
-RUNS_PER_GPU=20
-CUDA_VISIBLE_DEVICES=1
-
-echo "Launching $RUNS_PER_GPU wandb agent instances on GPU $CUDA_VISIBLE_DEVICES"
-
-for i in $(seq 1 $RUNS_PER_GPU); do
-  echo " → starting agent #$i"
-  # --count 1 makes each agent pull exactly one trial from the sweep
-  wandb agent $SWEEP_ID --count 1 &
-done
-
-# wait for all of them to complete
-wait
-echo "All $RUNS_PER_GPU runs finished."
+python main.py
