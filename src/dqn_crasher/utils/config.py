@@ -1,3 +1,6 @@
+from importlib.resources import files
+
+import yaml
 from yaml import dump, load
 
 try:
@@ -5,6 +8,17 @@ try:
     from yaml import CLoader as Loader
 except ImportError:
     from yaml import Dumper, Loader
+
+
+def load_pkg_yaml(rel_path: str):
+    """
+    Load a YAML packaged inside dqn_crasher. Use paths like:
+      "configs/model/dqn_vs_scenarios.yaml"
+      "configs/env/multi_agent.yaml"
+    """
+    p = files("dqn_crasher") / rel_path
+    with p.open("r") as f:
+        return yaml.safe_load(f)
 
 
 def load_config(config_path):

@@ -1,7 +1,7 @@
 import json
 import os
 
-from buffers import Transition
+from dqn_crasher.buffers.experience_replay import Transition
 
 
 class TrajectoryStore(object):

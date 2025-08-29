@@ -9,7 +9,8 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
-from trajectory_store import TrajectoryStore
+
+from src.dqn_crasher.utils.trajectory_store import TrajectoryStore
 
 
 def get_state_slices(state_spec):

@@ -6,19 +6,20 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
 import gymnasium as gym
 import highway_env
 import torch
-import utils
-import wandb
-from utils.config import load_config
+from utils.config import load_pkg_yaml
 from utils.helpers import make_players
 from utils.wandb_logging import initialize_logging
 
+import dqn_crasher.scenarios.policies as policies
 import dqn_crasher.scenarios.scenarios as scenarios
+import wandb
 from dqn_crasher.agents.dqn_agent import DQN_Agent
 from dqn_crasher.training.runner import MultiAgentRunner
+from dqn_crasher.utils.utils import DeviceHelper
 
 if __name__ == "__main__":
-    config = load_config("model_configs/dqn_vs_scenarios.yaml")
-    gym_config = load_config("env_configs/multi_agent.yaml")
+    config = load_pkg_yaml("configs/model/dqn_vs_scenarios.yaml")
+    gym_config = load_pkg_yaml("configs/env/multi_agent.yaml")
     gym_config["adversarial"] = False
     gym_config["normalize_reward"] = True
     gym_config["collision_reward"] = -1
@@ -39,7 +40,7 @@ if __name__ == "__main__":
             f"{config['lr']}_{config['batch_size']}_{config['num_hidden_layers']}_{config['hidden_layer']}",
         )
 
-    device = utils.DeviceHelper.get(config)
+    device = DeviceHelper.get(config)
     p_A, p_B = make_players(config, gym_config, device)
 
     runner = MultiAgentRunner(config["env_name"], config, gym_config, device, p_A, p_B)

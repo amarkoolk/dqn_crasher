@@ -1,9 +1,10 @@
 import gymnasium as gym
-import wandb
 from stable_baselines3 import DQN, PPO
 from stable_baselines3.common.env_util import make_atari_env, make_vec_env
 from stable_baselines3.common.vec_env import VecFrameStack, VecVideoRecorder
 from wandb.integration.sb3 import WandbCallback
+
+import wandb
 
 config = {
     "total_timesteps": int(10e6),

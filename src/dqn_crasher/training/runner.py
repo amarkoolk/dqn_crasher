@@ -4,15 +4,17 @@ import os
 from logging import raiseExceptions
 
 import gymnasium as gym
-import helpers
 import numpy as np
-import policies
 import torch
-import wandb
-from buffers import Transition
-from dqn_agent import DQN_Agent
 from tqdm import tqdm
-from wandb_logging import initialize_logging, log_checkpoint_summary, log_stats
+
+import dqn_crasher.scenarios.policies as policies
+import dqn_crasher.utils.helpers as helpers
+import wandb
+from dqn_crasher.agents.dqn_agent import DQN_Agent
+from dqn_crasher.buffers.experience_replay import Transition
+from dqn_crasher.utils.wandb_logging import (initialize_logging,
+                                             log_checkpoint_summary, log_stats)
 
 
 class MultiAgentRunner:

@@ -5,13 +5,14 @@ import gymnasium as gym
 import helpers
 import highway_env
 import torch
-import wandb
 from config import load_config
 from dqn_agent import DQN_Agent
 from multi_agent_dqn import train_agents
 from scenarios import CutIn, Slowdown, SlowdownSameLane, SpeedUp
 from tqdm import tqdm
 from wandb_logging import initialize_logging, log_stats
+
+import wandb
 
 
 class DeviceHelper:

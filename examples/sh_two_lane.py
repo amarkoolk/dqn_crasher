@@ -14,7 +14,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import tyro
-import wandb
 from arguments import Args
 from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 from config import load_config
@@ -27,6 +26,8 @@ from multi_agent_pool import multi_agent_loop
 from tqdm import tqdm
 from train_agent import train_agent
 from wandb_logging import initialize_logging
+
+import wandb
 
 if __name__ == "__main__":
     args = tyro.cli(Args)

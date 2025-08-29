@@ -1,4 +1,18 @@
 __pycache__/
 *.py[cod]
-*$py.class
-.vscode
+*.egg-info/
+dist/
+build/
+*.log
+
+.venv/
+.env/
+.ipynb_checkpoints/
+
+wandb/
+outputs/
+models/
+
+# IDE
+.vscode/
+.idea/

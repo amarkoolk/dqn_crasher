@@ -6,7 +6,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
+
+from dqn_crasher.buffers.experience_replay import (PrioritizedExperienceReplay,
+                                                   ReplayMemory, Transition)
 
 
 class DQN(nn.Module):

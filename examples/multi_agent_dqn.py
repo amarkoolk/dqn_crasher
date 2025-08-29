@@ -7,7 +7,6 @@ import highway_env
 import numpy as np
 import torch
 import torch.nn.functional as F
-import wandb
 from buffers import Transition
 from create_env import make_vector_env
 from dqn_agent import DQN_Agent
@@ -15,6 +14,8 @@ from model_pool import ModelPool
 from scenarios import CutIn, Slowdown, SlowdownSameLane, SpeedUp
 from tqdm import tqdm
 from wandb_logging import initialize_logging, log_stats
+
+import wandb
 
 
 def ego_vs_npc_pool(

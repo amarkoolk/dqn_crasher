@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dqn-crasher"
+version = "0.1.0"
+description = "DQN crasher experiments and training"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "Your Name"}]
+license = {text = "MIT"}
+dependencies = [
+  "torch>=2.0.0",
+  "numpy>=2.0.0",
+  "pyyaml>=6.0.0",
+  "tqdm>=4.0.0",
+  "tyro>=0.4.0",
+  "matplotlib>=3.10.0",
+  "gymnasium>=1.0.0",
+  "gym>=0.26.2",
+  "wandb>=0.20.0"
+]
+
+# optional extra bundles for dev/test
+[project.optional-dependencies]
+dev = ["ruff", "isort", "mypy", "pytest", "pytest-cov"]
+
+# console script: `dqn-crasher`
+[project.scripts]
+dqn-crasher = "dqn_crasher.main:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["policies", "scenarios"]
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["dqn_crasher*", "icrl*"]
+
+# Include YAML configs that live inside your package
+[tool.setuptools.package-data]
+dqn_crasher = ["configs/**/*.yaml"]
+
+# Exclude non-library folders from the wheel
+[tool.setuptools.exclude-package-data]
+"*" = ["__pycache__/*", "*.pyc", "*.pyo"]

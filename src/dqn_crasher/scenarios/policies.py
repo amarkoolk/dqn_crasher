@@ -2,12 +2,11 @@ import os
 import random
 from abc import ABC, abstractmethod
 
-import helpers
 import numpy as np
 import torch
-from buffers import Transition
-from trajectory_store import TrajectoryStore
 
+from dqn_crasher.buffers.experience_replay import Transition
+from dqn_crasher.utils.trajectory_store import TrajectoryStore
 from src.dqn_crasher.agents.dqn_agent import DQN_Agent
 
 

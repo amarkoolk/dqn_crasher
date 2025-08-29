@@ -8,14 +8,11 @@ import gymnasium as gym
 import highway_env
 import numpy as np
 import torch
-import utils
 
-import src.dqn_crasher.envs.scenarios as scenarios
-from src.dqn_crasher.agents.dqn_agent import DQN_Agent
-from src.dqn_crasher.scenarios.policies import (BasePolicy, DQNPolicy,
-                                                MobilPolicy,
-                                                PolicyDistribution,
-                                                ScenarioPolicy)
+from dqn_crasher.agents.dqn_agent import DQN_Agent
+from dqn_crasher.scenarios import policies, scenarios
+from dqn_crasher.scenarios.policies import (BasePolicy, DQNPolicy, MobilPolicy,
+                                            PolicyDistribution, ScenarioPolicy)
 
 
 def make_players(config, gym_config, device):
@@ -199,14 +196,14 @@ def make_step_actions(ego_action, npc_action, vs_mobil=False):
 def pick_policy_function(class_str: str, config, device):
     strings = class_str.split(".")
     if "scenario" in class_str:
-        class_type = utils.class_from_path(class_str)
+        class_type = class_from_path(class_str)
         return set_scenario_policy(class_type, config)
     elif "Mobil" in class_str and len(strings) > 2:
-        class_type = utils.class_from_path(strings[0] + "." + strings[1])
+        class_type = class_from_path(strings[0] + "." + strings[1])
         config["spawn_config"] = [strings[2]]
         return set_policy(class_type, config, device)
     else:
-        class_type = utils.class_from_path(class_str)
+        class_type = class_from_path(class_str)
         return set_policy(class_type, config, device)
 
 

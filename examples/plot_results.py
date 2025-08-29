@@ -4,8 +4,9 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import wandb
 from wandb.apis.public import Runs
+
+import wandb
 
 api = wandb.Api()
 training_runs: Runs = api.runs("amar-research/safetyh", filters={"tags": "bl_fl"})

@@ -11,7 +11,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import wandb
 from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 from config import load_config
 from create_env import make_env, make_vector_env
@@ -19,6 +18,8 @@ from dqn_agent import DQN, DQN_Agent, TrajectoryStore
 from model_pool import ModelPool
 from tqdm import tqdm
 from wandb_logging import initialize_logging
+
+import wandb
 
 
 def multi_agent_loop(

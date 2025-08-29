@@ -3,8 +3,9 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import wandb
 from wandb.apis.public import Runs
+
+import wandb
 
 if __name__ == "__main__":
     api = wandb.Api()

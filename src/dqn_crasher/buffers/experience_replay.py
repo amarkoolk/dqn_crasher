@@ -2,7 +2,8 @@ import random
 from collections import deque, namedtuple
 
 import numpy as np
-from sum_tree import SumTree
+
+from dqn_crasher.buffers.sum_tree import SumTree
 
 Transition = namedtuple("Transition", ("state", "action", "next_state", "reward"))
 
