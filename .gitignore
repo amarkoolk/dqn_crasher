@@ -1,7 +1,1 @@
-__pycache__
-wandb
-videos*
-*_videos*
-.DS_Store
-trajectories*
-*.pth
+.vscode
