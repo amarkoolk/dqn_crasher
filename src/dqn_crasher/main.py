@@ -17,7 +17,8 @@ from dqn_crasher.agents.dqn_agent import DQN_Agent
 from dqn_crasher.training.runner import MultiAgentRunner
 from dqn_crasher.utils.utils import DeviceHelper
 
-if __name__ == "__main__":
+
+def main():
     config = load_pkg_yaml("configs/model/dqn_vs_scenarios.yaml")
     gym_config = load_pkg_yaml("configs/env/multi_agent.yaml")
     gym_config["adversarial"] = False
@@ -49,3 +50,6 @@ if __name__ == "__main__":
         runner.train(train_player="A")
     else:
         runner.test()
+
+if __name__ == "__main__":
+    main()

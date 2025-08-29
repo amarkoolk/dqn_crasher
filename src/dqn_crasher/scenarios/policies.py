@@ -7,7 +7,7 @@ import torch
 
 from dqn_crasher.buffers.experience_replay import Transition
 from dqn_crasher.utils.trajectory_store import TrajectoryStore
-from src.dqn_crasher.agents.dqn_agent import DQN_Agent
+from dqn_crasher.agents.dqn_agent import DQN_Agent
 
 
 class BasePolicy(ABC):
