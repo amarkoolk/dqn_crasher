@@ -1,32 +1,29 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-
-import os
-import random
 import json
 import math
-import numpy as np
-from typing import TypeAlias, List, Tuple
+import os
+import random
 from collections import namedtuple
+from typing import List, Tuple, TypeAlias
 
-from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
-
-from tqdm import tqdm
-import wandb
 import gymnasium as gym
+import highway_env
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import tyro
+import wandb
+from arguments import Args
+from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
+from config import load_config
+from create_env import make_env, make_vector_env
 from dqn_agent import DQN, DQN_Agent, TrajectoryStore
 from model_pool import ModelPool
 from multi_agent_dqn import train_ego
 from multi_agent_pool import multi_agent_loop
+from tqdm import tqdm
 from wandb_logging import initialize_logging
-from config import load_config
-from create_env import make_env, make_vector_env
-import highway_env
-
-import tyro
-from arguments import Args
 
 if __name__ == "__main__":
     args = tyro.cli(Args)

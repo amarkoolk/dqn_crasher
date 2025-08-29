@@ -1,5 +1,6 @@
-from collections import deque, namedtuple
 import random
+from collections import deque, namedtuple
+
 import numpy as np
 from sum_tree import SumTree
 

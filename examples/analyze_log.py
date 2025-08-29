@@ -1,5 +1,6 @@
-import numpy as np
 import itertools as it
+
+import numpy as np
 from tqdm import tqdm
 
 filename = "/home/amar/rl_crash_course/src/dqn_crasher/wandb/latest-run/files/episode_rollouts.log"

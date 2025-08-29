@@ -1,17 +1,15 @@
-import torch
 import os
-from typing import TypeAlias, List, Tuple
+from typing import List, Tuple, TypeAlias
+
 import numpy as np
-
-from config import load_config
-from create_env import make_vector_env
-from model_pool import ModelPool
-from dqn_agent import DQN_Agent
-from multi_agent_pool import multi_agent_loop
-
+import torch
 import tyro
 from arguments import Args
-
+from config import load_config
+from create_env import make_vector_env
+from dqn_agent import DQN_Agent
+from model_pool import ModelPool
+from multi_agent_pool import multi_agent_loop
 
 if __name__ == "__main__":
     args = tyro.cli(Args)

@@ -1,7 +1,8 @@
 import json
-import numpy as np
-import matplotlib.pyplot as plt
 import os
+
+import matplotlib.pyplot as plt
+import numpy as np
 
 figure_dir = "figures"
 fig_dir = os.path.join(os.getcwd(), figure_dir)

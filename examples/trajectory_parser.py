@@ -1,6 +1,7 @@
-import numpy as np
 import json
 import os
+
+import numpy as np
 from tqdm import tqdm
 
 training_type = "PFSP"

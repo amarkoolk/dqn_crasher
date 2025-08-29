@@ -1,9 +1,9 @@
+import importlib
 import itertools
 from functools import partial
 from typing import Callable
-import importlib
+
 import numpy as np
-from numba import jit
 import torch
 
 
@@ -285,7 +285,6 @@ def binary_search(
     return x
 
 
-@jit(nopython=True)
 def binary_search_theta(
     q_p, f_p, c, eps: float, a: float, b: float = None, max_iterations: int = 100
 ):
@@ -314,13 +313,11 @@ def binary_search_theta(
     return x
 
 
-@jit(nopython=True)
 def theta_func(l, q_p, f_p, c):
     l_m_f_p = l - f_p
     return q_p @ np.log(l_m_f_p) + np.log(q_p @ (1 / l_m_f_p)) - c
 
 
-@jit(nopython=True)
 def d_theta_dl_func(l, q_p, f_p):
     l_m_f_p_inv = 1 / (l - f_p)
     q_l_m_f_p_inv = q_p @ l_m_f_p_inv

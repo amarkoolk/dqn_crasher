@@ -1,13 +1,11 @@
+import json
 import os
-
-import numpy as np
-import pandas as pd
+import time
 
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 from matplotlib.patches import Rectangle
-
-import json
-import time
 
 trajectory_path = "trajectories"
 file_name = "trajectories_ego_0.json"

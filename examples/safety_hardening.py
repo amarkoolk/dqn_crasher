@@ -1,26 +1,23 @@
-import wandb
-import gymnasium as gym
-
-import tyro
-import os
 import math
+import os
 import random
-import numpy as np
-from tqdm import tqdm
 
+import gymnasium as gym
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-
+import torch.optim as optim
+import tyro
+import wandb
 from arguments import Args
-from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
-from create_env import make_env, make_vector_env
-from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
-from dqn_agent import DQN, DQN_Agent
+from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 from config import load_config
+from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
+from create_env import make_env, make_vector_env
+from dqn_agent import DQN, DQN_Agent
+from tqdm import tqdm
 from wandb_logging import initialize_logging
-
 
 # from itertools import count
 # import warnings

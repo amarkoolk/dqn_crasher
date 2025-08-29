@@ -1,18 +1,19 @@
+import json
+
 import gymnasium as gym
-from gymnasium.vector import AsyncVectorEnv
+import highway_env
 import numpy as np
-from scenarios import Slowdown, SlowdownSameLane, SpeedUp, CutIn, IdleSlower, IdleFaster
-from config import load_config
 import torch
 import tyro
-from tqdm import tqdm
 from arguments import Args
-from dqn_agent import DQN_Agent
+from config import load_config
 from create_env import make_vector_env
-import json
-from helpers import unpack_states, make_step_actions
-
-import highway_env
+from dqn_agent import DQN_Agent
+from gymnasium.vector import AsyncVectorEnv
+from helpers import make_step_actions, unpack_states
+from scenarios import (CutIn, IdleFaster, IdleSlower, Slowdown,
+                       SlowdownSameLane, SpeedUp)
+from tqdm import tqdm
 
 if __name__ == "__main__":
     args = tyro.cli(Args)

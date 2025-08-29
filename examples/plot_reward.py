@@ -1,6 +1,5 @@
-import numpy as np
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
 
 ttc_x = np.linspace(-100, 100, 1000)
 ttc_y = np.linspace(-100, 100, 1000)

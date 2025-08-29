@@ -1,26 +1,24 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-
-import os
-import random
 import json
 import math
-import numpy as np
-from typing import TypeAlias, List, Tuple
+import os
+import random
 from collections import namedtuple
+from typing import List, Tuple, TypeAlias
 
-from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
-
-from tqdm import tqdm
-import wandb
 import gymnasium as gym
-from dqn_agent import DQN, DQN_Agent, TrajectoryStore
-from model_pool import ModelPool
-from wandb_logging import initialize_logging
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import wandb
+from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 from config import load_config
 from create_env import make_env, make_vector_env
+from dqn_agent import DQN, DQN_Agent, TrajectoryStore
+from model_pool import ModelPool
+from tqdm import tqdm
+from wandb_logging import initialize_logging
 
 
 def multi_agent_loop(

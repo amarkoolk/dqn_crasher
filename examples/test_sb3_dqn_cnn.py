@@ -1,8 +1,7 @@
 import gymnasium as gym
+import highway_env  # noqa: F401
 from stable_baselines3 import DQN
 from stable_baselines3.common.vec_env import DummyVecEnv, VecVideoRecorder
-
-import highway_env  # noqa: F401
 
 
 def train_env():

@@ -1,17 +1,18 @@
 # runner.py
-from logging import raiseExceptions
-import os
-import gymnasium as gym
-import torch
-import numpy as np
-from tqdm import tqdm
 import copy
+import os
+from logging import raiseExceptions
+
+import gymnasium as gym
 import helpers
-import wandb
-from wandb_logging import initialize_logging, log_stats, log_checkpoint_summary
-from dqn_agent import DQN_Agent
+import numpy as np
 import policies
+import torch
+import wandb
 from buffers import Transition
+from dqn_agent import DQN_Agent
+from tqdm import tqdm
+from wandb_logging import initialize_logging, log_checkpoint_summary, log_stats
 
 
 class MultiAgentRunner:

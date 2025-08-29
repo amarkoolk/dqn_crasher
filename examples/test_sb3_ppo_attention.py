@@ -1,21 +1,20 @@
 import functools
 
 import gymnasium as gym
+import highway_env  # noqa: F401
 import numpy as np
 import pygame
 import seaborn as sns
 import torch
 import torch as th
 import torch.nn as nn
+from highway_env.utils import lmap
 from stable_baselines3 import PPO
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 from stable_baselines3.common.vec_env import SubprocVecEnv
 from torch.distributions import Categorical
 from torch.nn import functional as F
-
-import highway_env  # noqa: F401
-from highway_env.utils import lmap
 
 # ==================================
 #        Policy Architecture

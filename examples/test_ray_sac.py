@@ -1,10 +1,9 @@
 import gymnasium as gym
-from gymnasium.wrappers.record_video import RecordVideo
-from crash_wrappers import CrashRewardWrapper
 import matplotlib.pyplot as plt
+from crash_wrappers import CrashRewardWrapper
+from gymnasium.wrappers.record_video import RecordVideo
 from ray.rllib.algorithms.sac.sac import SACConfig
 from ray.tune.registry import register_env
-
 from tqdm import tqdm
 
 

@@ -1,10 +1,11 @@
+import os
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import wandb
-import numpy as np
-import matplotlib.pyplot as plt
 from wandb.apis.public import Runs
-import sys
-import os
 
 figure_dir = "figures"
 fig_dir = os.path.join(os.getcwd(), figure_dir)

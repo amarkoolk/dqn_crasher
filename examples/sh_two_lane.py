@@ -1,42 +1,32 @@
-import torch
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-
-import shutil
-import os
-import random
 import json
 import math
-import numpy as np
-from typing import TypeAlias, List, Tuple
+import os
+import random
+import shutil
 from collections import namedtuple
+from typing import List, Tuple, TypeAlias
 
-from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
-
-from tqdm import tqdm
-import wandb
 import gymnasium as gym
-from dqn_agent import DQN, DQN_Agent, TrajectoryStore
-from model_pool import ModelPool
-from multi_agent_dqn import (
-    ego_vs_npc_pool,
-    npc_vs_ego_pool,
-    pool_evaluation,
-    test_agents,
-    train_agents,
-)
-from train_agent import train_agent
-from multi_agent_pool import multi_agent_loop
-from wandb_logging import initialize_logging
+import highway_env
+import numpy as np
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+import tyro
+import wandb
+from arguments import Args
+from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 from config import load_config
 from create_env import make_env, make_vector_env
-import highway_env
-
-
-import tyro
-from arguments import Args
-
+from dqn_agent import DQN, DQN_Agent, TrajectoryStore
+from model_pool import ModelPool
+from multi_agent_dqn import (ego_vs_npc_pool, npc_vs_ego_pool, pool_evaluation,
+                             test_agents, train_agents)
+from multi_agent_pool import multi_agent_loop
+from tqdm import tqdm
+from train_agent import train_agent
+from wandb_logging import initialize_logging
 
 if __name__ == "__main__":
     args = tyro.cli(Args)

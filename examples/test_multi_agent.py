@@ -1,8 +1,7 @@
-from create_env import make_env, make_vector_env
-from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
 import gymnasium as gym
-
 import wandb
+from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
+from create_env import make_env, make_vector_env
 
 
 def test_multi_agent():

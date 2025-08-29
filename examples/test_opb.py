@@ -1,8 +1,8 @@
+import sys
+
 import gymnasium as gym
 import highway_env
 from rl_agents.agents.common.factory import agent_factory
-
-import sys
 from tqdm import tqdm
 from utils import record_videos, show_videos
 

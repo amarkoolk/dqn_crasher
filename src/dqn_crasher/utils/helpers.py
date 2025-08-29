@@ -1,22 +1,21 @@
-from collections import deque
-import os
 import copy
-import torch
-from typing import Callable, List, Sequence, Tuple, Union
 import importlib
-import numpy as np
-from policies import (
-    BasePolicy,
-    DQNPolicy,
-    ScenarioPolicy,
-    MobilPolicy,
-    PolicyDistribution,
-)
-from dqn_agent import DQN_Agent
+import os
+from collections import deque
+from typing import Callable, List, Sequence, Tuple, Union
+
 import gymnasium as gym
 import highway_env
+import numpy as np
+import torch
 import utils
-import scenarios
+
+import src.dqn_crasher.envs.scenarios as scenarios
+from src.dqn_crasher.agents.dqn_agent import DQN_Agent
+from src.dqn_crasher.scenarios.policies import (BasePolicy, DQNPolicy,
+                                                MobilPolicy,
+                                                PolicyDistribution,
+                                                ScenarioPolicy)
 
 
 def make_players(config, gym_config, device):

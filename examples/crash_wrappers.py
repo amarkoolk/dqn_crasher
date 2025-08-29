@@ -1,11 +1,10 @@
-import gymnasium as gym
-from gymnasium import RewardWrapper, Wrapper
-
-from highway_env.road.road import Road, RoadNetwork
-from highway_env import utils
-
 import math
+
+import gymnasium as gym
 import matplotlib.pyplot as plt
+from gymnasium import RewardWrapper, Wrapper
+from highway_env import utils
+from highway_env.road.road import Road, RoadNetwork
 
 
 class CrashResetWrapper(Wrapper):

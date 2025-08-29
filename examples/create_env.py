@@ -1,6 +1,6 @@
 import gymnasium as gym
-from gymnasium.wrappers.rendering import RecordVideo
 from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
+from gymnasium.wrappers.rendering import RecordVideo
 
 
 def make_env(

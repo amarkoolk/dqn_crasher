@@ -1,6 +1,6 @@
 import math
 from dataclasses import dataclass
-from typing import Optional, Tuple, Literal
+from typing import Literal, Optional, Tuple
 
 import torch
 import torch.nn as nn

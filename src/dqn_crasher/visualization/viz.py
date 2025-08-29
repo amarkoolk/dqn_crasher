@@ -4,12 +4,12 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import json
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
 
-from trajectory_store import TrajectoryStore
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.animation import FuncAnimation
+from trajectory_store import TrajectoryStore
 
 
 def get_state_slices(state_spec):

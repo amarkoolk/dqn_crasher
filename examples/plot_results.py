@@ -1,10 +1,11 @@
+import os
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import wandb
-import numpy as np
-import matplotlib.pyplot as plt
 from wandb.apis.public import Runs
-import sys
-import os
 
 api = wandb.Api()
 training_runs: Runs = api.runs("amar-research/safetyh", filters={"tags": "bl_fl"})

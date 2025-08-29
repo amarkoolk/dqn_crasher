@@ -1,8 +1,9 @@
-from dqn_agent import DQN_Agent
-import numpy as np
 import json
 from copy import deepcopy
 from typing import Union
+
+import numpy as np
+from dqn_agent import DQN_Agent
 
 
 class ModelPool:

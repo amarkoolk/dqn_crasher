@@ -1,7 +1,7 @@
 import gymnasium as gym
 from crash_wrappers import CrashResetWrapper, CrashRewardWrapper
-from gymnasium.wrappers.record_video import RecordVideo
 from gymnasium.vector import AsyncVectorEnv, SyncVectorEnv
+from gymnasium.wrappers.record_video import RecordVideo
 
 
 def make_env(env_config, adversarial: bool = False):

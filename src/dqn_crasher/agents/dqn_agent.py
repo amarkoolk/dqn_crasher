@@ -1,11 +1,12 @@
+import math
+import random
+
+import numpy as np
 import torch
 import torch.nn as nn
-import torch.optim as optim
 import torch.nn.functional as F
-import random
-import math
-import numpy as np
-from buffers import ReplayMemory, PrioritizedExperienceReplay, Transition
+import torch.optim as optim
+from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 
 
 class DQN(nn.Module):

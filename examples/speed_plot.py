@@ -1,9 +1,10 @@
+import sys
+
+import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import wandb
-import numpy as np
-import matplotlib.pyplot as plt
 from wandb.apis.public import Runs
-import sys
 
 if __name__ == "__main__":
     api = wandb.Api()

@@ -1,5 +1,6 @@
+from typing import Dict, List, Tuple
+
 import torch
-from typing import List, Dict, Tuple
 
 
 @torch.no_grad()

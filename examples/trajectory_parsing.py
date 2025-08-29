@@ -1,16 +1,13 @@
-import os
-
-import numpy as np
-import pandas as pd
-
-import matplotlib.pyplot as plt
-import matplotlib.patches as patches
-from matplotlib.animation import FFMpegWriter
-
-
 import json
+import os
 import time
 from enum import Enum
+
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from matplotlib.animation import FFMpegWriter
 
 figure_dir = "figures"
 fig_dir = os.path.join(os.getcwd(), figure_dir)

@@ -1,6 +1,7 @@
-import wandb
 import os
+
 import numpy as np
+import wandb
 
 
 def initialize_logging(
