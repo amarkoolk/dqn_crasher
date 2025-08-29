@@ -69,7 +69,7 @@ class MultiLayerPerceptron(BaseModule):
         out_size=None,
         activation="RELU",
         is_policy=False,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.reshape = reshape
@@ -170,7 +170,7 @@ class EgoAttentionNetwork(BaseModule):
         presence_feature_idx=0,
         embedding_layer_kwargs=None,
         attention_layer_kwargs=None,
-        **kwargs
+        **kwargs,
     ):
         super().__init__(**kwargs)
         self.out_size = out_size
@@ -406,7 +406,7 @@ if __name__ == "__main__":
     #     functools.partial(display_vehicles_attention, env=env, model=model)
     # )
 
-    env = gym.make("highway-v0", render_mode='rgb_array')
+    env = gym.make("highway-v0", render_mode="rgb_array")
     env.configure(env_kwargs["config"])
     for _ in range(5):
         obs, info = env.reset()

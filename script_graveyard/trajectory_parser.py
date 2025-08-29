@@ -35,10 +35,7 @@ mean_lateral_velocity_npc = np.asarray(mean_lateral_velocity_npc)
 
 import matplotlib.pyplot as plt
 
-plt.hist(mean_lateral_velocity_ego, bins=100, alpha=0.5, label='ego')
-plt.hist(mean_lateral_velocity_npc, bins=100, alpha=0.5, label='npc')
-plt.legend(loc='upper right')
+plt.hist(mean_lateral_velocity_ego, bins=100, alpha=0.5, label="ego")
+plt.hist(mean_lateral_velocity_npc, bins=100, alpha=0.5, label="npc")
+plt.legend(loc="upper right")
 plt.show()
-
-
-

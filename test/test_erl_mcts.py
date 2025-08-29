@@ -3,7 +3,6 @@ from rl_agents.agents.tree_search.mcts import MCTSAgent
 
 
 def test_eleurent_mcts():
-
     env = gym.make("highway-fast-v0", render_mode="rgb_array")
     agent = MCTSAgent(env, config=dict(budget=400, temperature=200, max_depth=10))
 
@@ -23,6 +22,7 @@ def test_eleurent_mcts():
             steps += 1
 
     assert steps == env._max_episode_steps
+
 
 if __name__ == "__main__":
     test_eleurent_mcts()

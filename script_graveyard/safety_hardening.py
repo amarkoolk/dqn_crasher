@@ -22,17 +22,14 @@ from config import load_config
 from wandb_logging import initialize_logging
 
 
-
 # from itertools import count
 # import warnings
-
-
 
 
 if __name__ == "__main__":
     # Parse command line arguments
     args = tyro.cli(Args)
-    
+
     # Check Argument Inputs
     assert args.num_envs > 0
     assert args.total_timesteps > 0
@@ -52,9 +49,9 @@ if __name__ == "__main__":
         wandb_run = initialize_logging(args, ego_version=0)
 
     if args.cuda:
-        device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     elif args.metal:
-        device = torch.device("mps" if torch.backends.mps.is_available()  else "cpu")
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     else:
         device = torch.device("cpu")
 
@@ -71,21 +68,28 @@ if __name__ == "__main__":
 
     # Multi-Agent Environment Config
     ma_config = load_config("env_configs/multi_agent.yaml")
-    ma_config['use_mobil'] = True
-    ma_config['ego_vs_mobil'] = True
-    ma_config['adversarial'] = False
-    ma_config['normalize_reward'] = True
-    ma_config['collision_reward'] = -1
+    ma_config["use_mobil"] = True
+    ma_config["ego_vs_mobil"] = True
+    ma_config["adversarial"] = False
+    ma_config["normalize_reward"] = True
+    ma_config["collision_reward"] = -1
 
     # Create Vector Env with Non-Adversarial Rewards
-    env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
+    env = gym.make("crash-v0", config=ma_config, render_mode="rgb_array")
 
     # 1. Teach Ego Vehicle to Drive Safely in Highway against Non-Adversarial Vehicle
-    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=args.trajectories_folder+'/E0_MOBIL')
+    ego_agent = DQN_Agent(
+        env,
+        args,
+        device,
+        save_trajectories=args.save_trajectories,
+        multi_agent=True,
+        trajectory_path=args.trajectories_folder + "/E0_MOBIL",
+    )
 
     # # Load Ego Model
     if args.load_model:
-        ego_agent.load_model(path = 'ego_model.pth')
+        ego_agent.load_model(path="ego_model.pth")
 
     # # Learn Ego Model Initially
     if args.learn:
@@ -94,16 +98,16 @@ if __name__ == "__main__":
 
     # # Save Non-Adversarial Collision Trajectories
     if args.save_trajectories:
-        ego_agent.trajectory_store.write(args.trajectories_folder+'/trajectories_E0_MOBIL', 'json')
+        ego_agent.trajectory_store.write(
+            args.trajectories_folder + "/trajectories_E0_MOBIL", "json"
+        )
 
     # # Save Ego Model
     if args.save_model:
-        ego_agent.save_model(path = 'ego_model.pth')
-
-
+        ego_agent.save_model(path="ego_model.pth")
 
     # 2. Test Ego Vehicle in Non-Adversarial Environment
-    
+
     # ego_model = "models/bl_eps_start_1.0/E1_V0_TrainEgo_True.pth"
     # na_env = gym.make('crash-v0', config=na_env_cfg, render_mode='rgb_array')
     # na_env.configure({'adversarial' : False})
@@ -143,7 +147,7 @@ if __name__ == "__main__":
 
     # t_step = 0
     # ep_num = 0
-    
+
     # # Testing Loop
     # while True:
     #     done = False
@@ -158,16 +162,15 @@ if __name__ == "__main__":
     #         reward = torch.tensor(reward, dtype = torch.float32, device=device)
     #         done = terminated | truncated
 
-
     #         ego_state = torch.tensor(obs[0].flatten(), dtype=torch.float32, device=device)
 
     #         npc_next_state = torch.tensor(obs[1].flatten(), dtype=torch.float32, device=device)
-            
+
     #         if terminated:
     #             npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), None, reward.view(1,1))
     #         else:
     #             npc_agent.memory.push(npc_state.view(1,npc_agent.n_observations), npc_action.view(1,1), npc_next_state.view(1,npc_agent.n_observations), reward.view(1,1))
-            
+
     #         npc_state = npc_next_state
 
     #         episode_rewards += reward.cpu().numpy()
@@ -198,7 +201,7 @@ if __name__ == "__main__":
     #                     "rollout/num_crashes": num_crashes[-1],
     #                     "rollout/num_crashes_mean": np.mean(num_crashes)},
     #                     step = ep_num)
-                
+
     #             episode_rewards = 0.0
     #             duration = 0.0
     #             ep_num += 1
@@ -207,4 +210,3 @@ if __name__ == "__main__":
     #         env.render()
 
     # env.close()
-    

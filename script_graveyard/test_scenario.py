@@ -16,12 +16,11 @@ from train_agent import test_scenarios, train_scenarios, train_vs_mobil
 import highway_env
 
 if __name__ == "__main__":
-
     config = load_config("model_configs/test_scenario_config.yaml")
     gym_config = load_config("env_configs/multi_agent.yaml")
-    gym_config['vs_mobil'] = True
-    gym_config['controlled_vehicles'] = 1
-    gym_config['other_vehicles'] = 1
-    config['gym_config'] = gym_config
+    gym_config["vs_mobil"] = True
+    gym_config["controlled_vehicles"] = 1
+    gym_config["other_vehicles"] = 1
+    config["gym_config"] = gym_config
 
     test_scenarios(config)

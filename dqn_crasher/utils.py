@@ -6,14 +6,16 @@ import numpy as np
 from numba import jit
 import torch
 
+
 class DeviceHelper:
     @staticmethod
     def get(config):
         if config["device"] == "cuda":
             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
         if config["device"] == "mps":
-            return torch.device("mps"  if torch.backends.mps.is_available() else "cpu")
+            return torch.device("mps" if torch.backends.mps.is_available() else "cpu")
         return torch.device("cpu")
+
 
 def constrain(x, a, b):
     return np.minimum(np.maximum(x, a), b)
@@ -29,13 +31,13 @@ def not_zero(x, eps=0.01):
 
 
 def wrap_to_pi(x):
-    return ((x+np.pi) % (2*np.pi)) - np.pi
+    return ((x + np.pi) % (2 * np.pi)) - np.pi
 
 
 def remap(v, x, y, clip=False):
     if x[1] == x[0]:
         return y[0]
-    out = y[0] + (v-x[0])*(y[1]-y[0])/(x[1]-x[0])
+    out = y[0] + (v - x[0]) * (y[1] - y[0]) / (x[1] - x[0])
     if clip:
         out = constrain(out, y[0], y[1])
     return out
@@ -75,7 +77,9 @@ def zip_with_singletons(*args):
     :param args: arguments to zip x1, x2, .. xn
     :return: zipped tuples (x11, x21, ..., xn1), ... (x1m, x2m, ..., xnm)
     """
-    return zip(*(arg if isinstance(arg, list) else itertools.repeat(arg) for arg in args))
+    return zip(
+        *(arg if isinstance(arg, list) else itertools.repeat(arg) for arg in args)
+    )
 
 
 def kullback_leibler(p: np.ndarray, q: np.ndarray) -> float:
@@ -89,7 +93,7 @@ def kullback_leibler(p: np.ndarray, q: np.ndarray) -> float:
     for pi, qi in zip(p, q):
         if pi > 0:
             if qi > 0:
-                kl += pi * np.log(pi/qi)
+                kl += pi * np.log(pi / qi)
             else:
                 kl = np.inf
     return kl
@@ -106,7 +110,7 @@ def bernoulli_kullback_leibler(p: float, q: float) -> float:
     kl1, kl2 = 0, np.infty
     if p > 0:
         if q > 0:
-            kl1 = p*np.log(p/q)
+            kl1 = p * np.log(p / q)
 
     if q < 1:
         if p < 1:
@@ -126,10 +130,16 @@ def d_bernoulli_kullback_leibler_dq(p: float, q: float) -> float:
     :param q: parameter of the second Bernoulli distribution
     :return: dKL/dq(B(p) || B(q))
     """
-    return (1 - p) / (1 - q) - p/q
+    return (1 - p) / (1 - q) - p / q
 
 
-def kl_upper_bound(_sum: float, count: int, threshold: float = 1, eps: float = 1e-2, lower: bool = False) -> float:
+def kl_upper_bound(
+    _sum: float,
+    count: int,
+    threshold: float = 1,
+    eps: float = 1e-2,
+    lower: bool = False,
+) -> float:
     """
         Upper Confidence Bound of the empirical mean built on the Kullback-Leibler divergence.
 
@@ -145,8 +155,8 @@ def kl_upper_bound(_sum: float, count: int, threshold: float = 1, eps: float = 1
     if count == 0:
         return 0 if lower else 1
 
-    mu = _sum/count
-    max_div = threshold/count
+    mu = _sum / count
+    max_div = threshold / count
 
     # Solve KL(mu, q) = max_div
     kl = lambda q: bernoulli_kullback_leibler(mu, q) - max_div
@@ -156,8 +166,17 @@ def kl_upper_bound(_sum: float, count: int, threshold: float = 1, eps: float = 1
     return newton_iteration(kl, d_kl, eps, a=a, b=b)
 
 
-def newton_iteration(f: Callable, df: Callable, eps: float, x0: float = None, a: float = None, b: float = None,
-                     weight: float = 0.9, display: bool = False, max_iterations: int = 100) -> float:
+def newton_iteration(
+    f: Callable,
+    df: Callable,
+    eps: float,
+    x0: float = None,
+    a: float = None,
+    b: float = None,
+    weight: float = 0.9,
+    display: bool = False,
+    max_iterations: int = 100,
+) -> float:
     """
         Run Newton Iteration to solve f(x) = 0, with x in [a, b]
     :param f: a function R -> R
@@ -183,8 +202,9 @@ def newton_iteration(f: Callable, df: Callable, eps: float, x0: float = None, a:
 
         if display:
             import matplotlib.pyplot as plt
-            xx0 = a or x-1
-            xx1 = b or x+1
+
+            xx0 = a or x - 1
+            xx1 = b or x + 1
             xx = np.linspace(xx0, xx1, 100)
             yy = np.array(list(map(f, xx)))
             plt.plot(xx, yy)
@@ -195,7 +215,7 @@ def newton_iteration(f: Callable, df: Callable, eps: float, x0: float = None, a:
         try:
             df_x = df(x)
         except ZeroDivisionError:
-            df_x = (f_x - f(x-eps))/eps
+            df_x = (f_x - f(x - eps)) / eps
         if df_x != 0:
             x_next = x - f_x / df_x
 
@@ -212,8 +232,14 @@ def newton_iteration(f: Callable, df: Callable, eps: float, x0: float = None, a:
     return x_next
 
 
-def binary_search(f: Callable, eps: float, a: float, b: float = None,
-                  display: bool = False, max_iterations: int = 100) -> float:
+def binary_search(
+    f: Callable,
+    eps: float,
+    a: float,
+    b: float = None,
+    display: bool = False,
+    max_iterations: int = 100,
+) -> float:
     """
     Binary search the zero of a non-increasing function.
     :param f: the function
@@ -234,6 +260,7 @@ def binary_search(f: Callable, eps: float, a: float, b: float = None,
 
         if display:
             import matplotlib.pyplot as plt
+
             xx0 = a
             xx1 = b
             xx = np.linspace(xx0, xx1, 100)
@@ -245,7 +272,7 @@ def binary_search(f: Callable, eps: float, a: float, b: float = None,
         if f_x > 0:
             a = x
             if find_b:
-                b = 2*max(b, 1)
+                b = 2 * max(b, 1)
         else:
             b = x
             find_b = False
@@ -259,7 +286,9 @@ def binary_search(f: Callable, eps: float, a: float, b: float = None,
 
 
 @jit(nopython=True)
-def binary_search_theta(q_p, f_p, c, eps: float, a: float, b: float = None, max_iterations: int = 100):
+def binary_search_theta(
+    q_p, f_p, c, eps: float, a: float, b: float = None, max_iterations: int = 100
+):
     x = np.nan
     find_b = False
     if b is None:
@@ -272,7 +301,7 @@ def binary_search_theta(q_p, f_p, c, eps: float, a: float, b: float = None, max_
         if f_x > 0:
             a = x
             if find_b:
-                b = 2*max(b, 1)
+                b = 2 * max(b, 1)
         else:
             b = x
             find_b = False
@@ -295,11 +324,12 @@ def theta_func(l, q_p, f_p, c):
 def d_theta_dl_func(l, q_p, f_p):
     l_m_f_p_inv = 1 / (l - f_p)
     q_l_m_f_p_inv = q_p @ l_m_f_p_inv
-    return q_l_m_f_p_inv - (q_p @ (l_m_f_p_inv ** 2)) / q_l_m_f_p_inv
+    return q_l_m_f_p_inv - (q_p @ (l_m_f_p_inv**2)) / q_l_m_f_p_inv
 
 
-def max_expectation_under_constraint(f: np.ndarray, q: np.ndarray, c: float, eps: float = 1e-2,
-                                     display: bool = False) -> np.ndarray:
+def max_expectation_under_constraint(
+    f: np.ndarray, q: np.ndarray, c: float, eps: float = 1e-2, display: bool = False
+) -> np.ndarray:
     """
         Solve the following constrained optimisation problem:
              max_p E_p[f]    s.t.    KL(q || p) <= c
@@ -336,7 +366,9 @@ def max_expectation_under_constraint(f: np.ndarray, q: np.ndarray, c: float, eps
         else:
             # Binary search seems slightly (10%) faster than newton
             # lambda_ = binary_search(theta, eps, a=f_star, display=display)
-            lambda_ = newton_iteration(theta, d_theta_dl, eps, x0=f_star + 1, a=f_star, display=display)
+            lambda_ = newton_iteration(
+                theta, d_theta_dl, eps, x0=f_star + 1, a=f_star, display=display
+            )
 
             # numba jit binary search is twice as fast as python version
             # lambda_ = binary_search_theta(q_p=q_p, f_p=f_p, c=c, eps=eps, a=f_star)

@@ -1,9 +1,9 @@
 from dataclasses import dataclass
 import os
 
+
 @dataclass
 class Args:
-
     # General arguments
 
     exp_name: str = os.path.basename(__file__)[: -len(".py")]
@@ -94,4 +94,3 @@ class Args:
     """the number of hidden layers in the neural network"""
     hidden_layer: int = 256
     """the number of neurons in the hidden layer"""
-    

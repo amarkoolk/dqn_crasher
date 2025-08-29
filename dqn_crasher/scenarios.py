@@ -1,12 +1,14 @@
 from enum import Enum
 import numpy as np
 
+
 class Action(Enum):
     LANE_LEFT = 0
     IDLE = 1
     LANE_RIGHT = 2
     FASTER = 3
     SLOWER = 4
+
 
 class Scenario:
     def __init__(self, use_spawn_distribution: bool = False):
@@ -20,7 +22,6 @@ class Scenario:
         self.use_spawn_distribution = use_spawn_distribution
 
     def set_state(self, ego_state: np.ndarray, npc_state: np.ndarray):
-
         # print(f"Ego State: {ego_state}")
         # print(f"NPC State: {npc_state}")
 
@@ -32,14 +33,14 @@ class Scenario:
         self.npc_x = sliced_npc_state[1]
         self.npc_y = sliced_npc_state[2]
 
-    def reset(self, test = False):
+    def reset(self, test=False):
         """
         Common reset logic across all scenarios.
         """
         self.state = None
         self.end_frames = 0
         self.prev_action = Action.IDLE.value
-        self.set_spawn_distriubtion(use_spawn_distribution = not test)
+        self.set_spawn_distriubtion(use_spawn_distribution=not test)
 
     def get_action(self):
         """
@@ -53,9 +54,11 @@ class Scenario:
         """
         raise NotImplementedError
 
+
 #
 # Child classes
 #
+
 
 class IdleSlower(Scenario):
     def __init__(self, use_spawn_distribution: bool = False):
@@ -68,10 +71,11 @@ class IdleSlower(Scenario):
         """
         Set the configuration for the scenario.
         """
-        config['adversarial'] = False
-        config['use_spawn_distribution'] = self.use_spawn_distribution
-        config['mean_delta_v'] = -5.0
-        config['spawn_configs'] = ['forward_right']
+        config["adversarial"] = False
+        config["use_spawn_distribution"] = self.use_spawn_distribution
+        config["mean_delta_v"] = -5.0
+        config["spawn_configs"] = ["forward_right"]
+
 
 class IdleFaster(Scenario):
     def __init__(self, use_spawn_distribution: bool = False):
@@ -84,10 +88,11 @@ class IdleFaster(Scenario):
         """
         Set the configuration for the scenario.
         """
-        config['adversarial'] = False
-        config['use_spawn_distribution'] = self.use_spawn_distribution
-        config['mean_delta_v'] = 5.0
-        config['spawn_configs'] = ['behind_left']
+        config["adversarial"] = False
+        config["use_spawn_distribution"] = self.use_spawn_distribution
+        config["mean_delta_v"] = 5.0
+        config["spawn_configs"] = ["behind_left"]
+
 
 class Slowdown(Scenario):
     def __init__(self, use_spawn_distribution: bool = False):
@@ -100,10 +105,10 @@ class Slowdown(Scenario):
         """
         Set the configuration for the scenario.
         """
-        config['adversarial'] = False
-        config['use_spawn_distribution'] = self.use_spawn_distribution
-        config['mean_delta_v'] = 0.0
-        config['spawn_configs'] = ['forward_left']
+        config["adversarial"] = False
+        config["use_spawn_distribution"] = self.use_spawn_distribution
+        config["mean_delta_v"] = 0.0
+        config["spawn_configs"] = ["forward_left"]
 
 
 class SlowdownSameLane(Scenario):
@@ -117,10 +122,10 @@ class SlowdownSameLane(Scenario):
         """
         Set the configuration for the scenario.
         """
-        config['adversarial'] = False
-        config['use_spawn_distribution'] = self.use_spawn_distribution
-        config['mean_delta_v'] = 0.0
-        config['spawn_configs'] = ['forward_center']
+        config["adversarial"] = False
+        config["use_spawn_distribution"] = self.use_spawn_distribution
+        config["mean_delta_v"] = 0.0
+        config["spawn_configs"] = ["forward_center"]
 
 
 class SpeedUp(Scenario):
@@ -130,15 +135,14 @@ class SpeedUp(Scenario):
     def get_action(self):
         return Action.FASTER.value
 
-
     def set_config(self, config: dict):
         """
         Set the configuration for the scenario.
         """
-        config['adversarial'] = False
-        config['use_spawn_distribution'] = self.use_spawn_distribution
-        config['mean_delta_v'] = 0.0
-        config['spawn_configs'] = ['behind_left']
+        config["adversarial"] = False
+        config["use_spawn_distribution"] = self.use_spawn_distribution
+        config["mean_delta_v"] = 0.0
+        config["spawn_configs"] = ["behind_left"]
 
 
 class CutIn(Scenario):
@@ -151,9 +155,9 @@ class CutIn(Scenario):
         super().__init__(use_spawn_distribution)
         self.current_maneuver = self.CutInManeuver.ACCELERATE
         self.maneuver_counter = 0
-        self.spawn_configs = ['behind_left']
+        self.spawn_configs = ["behind_left"]
 
-    def reset(self, test = False):
+    def reset(self, test=False):
         """
         Override reset if scenario-specific attributes need re-initialization.
         Still call super() for the common steps.
@@ -166,10 +170,10 @@ class CutIn(Scenario):
         """
         Set the configuration for the scenario.
         """
-        config['adversarial'] = False
-        config['use_spawn_distribution'] = self.use_spawn_distribution
-        config['mean_delta_v'] = 0.0
-        config['spawn_configs'] = ['behind_left']
+        config["adversarial"] = False
+        config["use_spawn_distribution"] = self.use_spawn_distribution
+        config["mean_delta_v"] = 0.0
+        config["spawn_configs"] = ["behind_left"]
 
     def get_action(self):
         action = self.prev_action
@@ -197,6 +201,7 @@ class CutIn(Scenario):
         self.prev_action = action
         return action
 
+
 class CutInSlowDown(Scenario):
     class CutInManeuver(Enum):
         WAIT = 0
@@ -209,9 +214,9 @@ class CutInSlowDown(Scenario):
         self.maneuver_counter = 0
         self.current_maneuver = self.CutInManeuver.WAIT
         self.prev_action = Action.IDLE.value
-        self.spawn_configs = ['forward_left']
+        self.spawn_configs = ["forward_left"]
 
-    def reset(self, test = False):
+    def reset(self, test=False):
         """
         Override reset if scenario-specific attributes need re-initialization.
         Still call super() for the common steps.
@@ -225,11 +230,11 @@ class CutInSlowDown(Scenario):
         """
         Set the configuration for the scenario.
         """
-        config['adversarial'] = False
-        config['use_spawn_distribution'] = self.use_spawn_distribution
-        config['mean_delta_v'] = 0.0
-        config['mean_distance'] = 20.0
-        config['spawn_configs'] = ['forward_left']
+        config["adversarial"] = False
+        config["use_spawn_distribution"] = self.use_spawn_distribution
+        config["mean_delta_v"] = 0.0
+        config["mean_distance"] = 20.0
+        config["spawn_configs"] = ["forward_left"]
 
     def get_action(self):
         action = self.prev_action

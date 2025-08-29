@@ -21,35 +21,45 @@ run = wandb.init(
 )
 
 env_config = {
-        "observation": {
-            "type": "Kinematics",
-            "normalize": False
-        },
-        "action": {
-            "type": "DiscreteMetaAction",
-            "target_speeds": list(range(15,35))
-        },
-        "lanes_count" : 2,
-        "vehicles_count" : 1,
-        "duration" : 100,
-        "initial_lane_id" : None,
-        "policy_frequency": 1,
-        # Reset Configs
-        'spawn_configs' : ['behind_left', 'behind_right', 'behind_center', 'adjacent_left', 'adjacent_right', 'forward_left', 'forward_right', 'forward_center'],
-        'mean_distance' : 20,
-        'initial_speed' : 20,
-        'mean_delta_v' : 0,
-        'tolerance' : 1e-3
+    "observation": {"type": "Kinematics", "normalize": False},
+    "action": {"type": "DiscreteMetaAction", "target_speeds": list(range(15, 35))},
+    "lanes_count": 2,
+    "vehicles_count": 1,
+    "duration": 100,
+    "initial_lane_id": None,
+    "policy_frequency": 1,
+    # Reset Configs
+    "spawn_configs": [
+        "behind_left",
+        "behind_right",
+        "behind_center",
+        "adjacent_left",
+        "adjacent_right",
+        "forward_left",
+        "forward_right",
+        "forward_center",
+    ],
+    "mean_distance": 20,
+    "initial_speed": 20,
+    "mean_delta_v": 0,
+    "tolerance": 1e-3,
 }
+
 
 def custom_highway_env(env_id, env_config):
     def _init():
-        env = gym.make(env_id, render_mode='rgb_array')
+        env = gym.make(env_id, render_mode="rgb_array")
         env.configure(env_config)  # Assuming your env has a configure method
         return env
+
     return _init
 
-env = make_vec_env(custom_highway_env(config["env_name"], env_config), n_envs=config["num_envs"], seed=0)
+
+env = make_vec_env(
+    custom_highway_env(config["env_name"], env_config),
+    n_envs=config["num_envs"],
+    seed=0,
+)
 # env = VecFrameStack(env, n_stack=4)
 # env = VecVideoRecorder(env, "videos", record_video_trigger=lambda x: x % 100000 == 0, video_length=2000)  # record videos
 model = PPO(

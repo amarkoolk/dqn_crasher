@@ -1,4 +1,4 @@
-import pandas as pd 
+import pandas as pd
 import wandb
 import numpy as np
 import matplotlib.pyplot as plt
@@ -6,119 +6,225 @@ from wandb.apis.public import Runs
 import sys
 
 if __name__ == "__main__":
-    
     api = wandb.Api()
-    training_runs : Runs = api.runs("amar-research/safetyh",
-                    filters={"tags" : "07152024"}
-                    )
+    training_runs: Runs = api.runs(
+        "amar-research/safetyh", filters={"tags": "07152024"}
+    )
 
     cycles = {}
     # Should be only one run
     for run in training_runs:
         config = run.config
-        print(f'Ego Version: {config["ego_version"]}, NPC Version: {config["npc_version"]}')
+        print(
+            f"Ego Version: {config['ego_version']}, NPC Version: {config['npc_version']}"
+        )
         history = run.scan_history()
-        run_history = run.history(samples=history.max_step, x_axis="_step", pandas=(True), stream="default")
+        run_history = run.history(
+            samples=history.max_step, x_axis="_step", pandas=(True), stream="default"
+        )
         cycles[(config["ego_version"], config["npc_version"])] = run_history
 
     # Filter Dataframe to Keep only steps where 'rollout/spawn_config' is 'behind_left'
     # for cycle_key in cycles.keys():
 
-    cycle_key=(1,0)
+    cycle_key = (1, 0)
 
-    use_mobil_filter = cycles[cycle_key]['rollout/use_mobil'] == True
+    use_mobil_filter = cycles[cycle_key]["rollout/use_mobil"] == True
     print(use_mobil_filter)
 
-    fig, ax = plt.subplots(2,2)
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'behind_left'].plot(ax=ax[0,0],x="_step", y="rollout/ego_speed_mean", grid=True, label = 'BL-EGO')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'forward_left'].plot(ax=ax[0,0],x="_step", y="rollout/ego_speed_mean", grid=True, label='FL-EGO')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'behind_left'].plot(ax=ax[1,0],x="_step", y="rollout/npc_speed_mean", grid=True, label = 'BL-NPC')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'forward_left'].plot(ax=ax[1,0],x="_step", y="rollout/npc_speed_mean", grid=True, label='FL-NPC')
+    fig, ax = plt.subplots(2, 2)
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "behind_left"
+    ].plot(
+        ax=ax[0, 0], x="_step", y="rollout/ego_speed_mean", grid=True, label="BL-EGO"
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "forward_left"
+    ].plot(
+        ax=ax[0, 0], x="_step", y="rollout/ego_speed_mean", grid=True, label="FL-EGO"
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "behind_left"
+    ].plot(
+        ax=ax[1, 0], x="_step", y="rollout/npc_speed_mean", grid=True, label="BL-NPC"
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "forward_left"
+    ].plot(
+        ax=ax[1, 0], x="_step", y="rollout/npc_speed_mean", grid=True, label="FL-NPC"
+    )
 
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'behind_left'].ewm(span=100).mean().plot(ax=ax[0,0],x="_step", y="rollout/ego_speed_mean", grid=True, label = 'BL-EGO-avg')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'forward_left'].ewm(span=100).mean().plot(ax=ax[0,0],x="_step", y="rollout/ego_speed_mean", grid=True, label='FL-EGO-avg')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'behind_left'].ewm(span=100).mean().plot(ax=ax[1,0],x="_step", y="rollout/npc_speed_mean", grid=True, label = 'BL-NPC-avg')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'forward_left'].ewm(span=100).mean().plot(ax=ax[1,0],x="_step", y="rollout/npc_speed_mean", grid=True, label='FL-NPC-avg')
-    ax[0,0].legend()
-    ax[1,0].legend()
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "behind_left"
+    ].ewm(span=100).mean().plot(
+        ax=ax[0, 0],
+        x="_step",
+        y="rollout/ego_speed_mean",
+        grid=True,
+        label="BL-EGO-avg",
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "forward_left"
+    ].ewm(span=100).mean().plot(
+        ax=ax[0, 0],
+        x="_step",
+        y="rollout/ego_speed_mean",
+        grid=True,
+        label="FL-EGO-avg",
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "behind_left"
+    ].ewm(span=100).mean().plot(
+        ax=ax[1, 0],
+        x="_step",
+        y="rollout/npc_speed_mean",
+        grid=True,
+        label="BL-NPC-avg",
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "forward_left"
+    ].ewm(span=100).mean().plot(
+        ax=ax[1, 0],
+        x="_step",
+        y="rollout/npc_speed_mean",
+        grid=True,
+        label="FL-NPC-avg",
+    )
+    ax[0, 0].legend()
+    ax[1, 0].legend()
 
-    mobil_df = cycles[cycle_key].loc[cycles[cycle_key]['rollout/use_mobil'] == True]
+    mobil_df = cycles[cycle_key].loc[cycles[cycle_key]["rollout/use_mobil"] == True]
 
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'behind_left'].plot(ax=ax[0,1],x="_step", y="rollout/ego_speed_mean", grid=True, label = 'BL-MOBIL')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'forward_left'].plot(ax=ax[0,1],x="_step", y="rollout/ego_speed_mean", grid=True, label='FL-MOBIL')
-    mobil_df.loc[mobil_df['rollout/spawn_config'] == 'behind_left'].plot(ax=ax[1,1],x="_step", y="rollout/npc_speed_mean", grid=True, label = 'BL-NPC')
-    mobil_df.loc[mobil_df['rollout/spawn_config'] == 'forward_left'].plot(ax=ax[1,1],x="_step", y="rollout/npc_speed_mean", grid=True, label='FL-NPC')
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "behind_left"
+    ].plot(
+        ax=ax[0, 1], x="_step", y="rollout/ego_speed_mean", grid=True, label="BL-MOBIL"
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "forward_left"
+    ].plot(
+        ax=ax[0, 1], x="_step", y="rollout/ego_speed_mean", grid=True, label="FL-MOBIL"
+    )
+    mobil_df.loc[mobil_df["rollout/spawn_config"] == "behind_left"].plot(
+        ax=ax[1, 1], x="_step", y="rollout/npc_speed_mean", grid=True, label="BL-NPC"
+    )
+    mobil_df.loc[mobil_df["rollout/spawn_config"] == "forward_left"].plot(
+        ax=ax[1, 1], x="_step", y="rollout/npc_speed_mean", grid=True, label="FL-NPC"
+    )
 
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'behind_left'].ewm(span=100).mean().plot(ax=ax[0,1],x="_step", y="rollout/ego_speed_mean", grid=True, label = 'BL-MOBIL-avg')
-    cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'forward_left'].ewm(span=100).mean().plot(ax=ax[0,1],x="_step", y="rollout/ego_speed_mean", grid=True, label='FL-MOBIL-avg')
-    mobil_df.loc[mobil_df['rollout/spawn_config'] == 'behind_left'].ewm(span=100).mean().plot(ax=ax[1,1],x="_step", y="rollout/npc_speed_mean", grid=True, label = 'BL-NPC-avg')
-    mobil_df.loc[mobil_df['rollout/spawn_config'] == 'forward_left'].ewm(span=100).mean().plot(ax=ax[1,1],x="_step", y="rollout/npc_speed_mean", grid=True, label='FL-NPC-avg')
-    ax[1,0].legend()
-    ax[1,1].legend()
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "behind_left"
+    ].ewm(span=100).mean().plot(
+        ax=ax[0, 1],
+        x="_step",
+        y="rollout/ego_speed_mean",
+        grid=True,
+        label="BL-MOBIL-avg",
+    )
+    cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "forward_left"
+    ].ewm(span=100).mean().plot(
+        ax=ax[0, 1],
+        x="_step",
+        y="rollout/ego_speed_mean",
+        grid=True,
+        label="FL-MOBIL-avg",
+    )
+    mobil_df.loc[mobil_df["rollout/spawn_config"] == "behind_left"].ewm(
+        span=100
+    ).mean().plot(
+        ax=ax[1, 1],
+        x="_step",
+        y="rollout/npc_speed_mean",
+        grid=True,
+        label="BL-NPC-avg",
+    )
+    mobil_df.loc[mobil_df["rollout/spawn_config"] == "forward_left"].ewm(
+        span=100
+    ).mean().plot(
+        ax=ax[1, 1],
+        x="_step",
+        y="rollout/npc_speed_mean",
+        grid=True,
+        label="FL-NPC-avg",
+    )
+    ax[1, 0].legend()
+    ax[1, 1].legend()
     plt.show()
-        
-    bl_df = cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'behind_left']
-    bl_um_ego = bl_df.loc[bl_df['rollout/use_mobil'] == True]['rollout/ego_speed_mean']
-    bl_num_ego = bl_df.loc[bl_df['rollout/use_mobil'] == False]['rollout/ego_speed_mean']
 
-    fl_df = cycles[cycle_key].loc[cycles[cycle_key]['rollout/spawn_config'] == 'forward_left']
-    fl_um_ego = fl_df.loc[fl_df['rollout/use_mobil'] == True]['rollout/ego_speed_mean']
-    fl_num_ego = fl_df.loc[fl_df['rollout/use_mobil'] == False]['rollout/ego_speed_mean']
+    bl_df = cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "behind_left"
+    ]
+    bl_um_ego = bl_df.loc[bl_df["rollout/use_mobil"] == True]["rollout/ego_speed_mean"]
+    bl_num_ego = bl_df.loc[bl_df["rollout/use_mobil"] == False][
+        "rollout/ego_speed_mean"
+    ]
 
-    bl_um_npc = bl_df.loc[bl_df['rollout/use_mobil'] == True]['rollout/npc_speed_mean']
-    bl_num_npc = bl_df.loc[bl_df['rollout/use_mobil'] == False]['rollout/npc_speed_mean']
+    fl_df = cycles[cycle_key].loc[
+        cycles[cycle_key]["rollout/spawn_config"] == "forward_left"
+    ]
+    fl_um_ego = fl_df.loc[fl_df["rollout/use_mobil"] == True]["rollout/ego_speed_mean"]
+    fl_num_ego = fl_df.loc[fl_df["rollout/use_mobil"] == False][
+        "rollout/ego_speed_mean"
+    ]
 
-    fl_um_npc = fl_df.loc[fl_df['rollout/use_mobil'] == True]['rollout/npc_speed_mean']
-    fl_num_npc = fl_df.loc[fl_df['rollout/use_mobil'] == False]['rollout/npc_speed_mean']
+    bl_um_npc = bl_df.loc[bl_df["rollout/use_mobil"] == True]["rollout/npc_speed_mean"]
+    bl_num_npc = bl_df.loc[bl_df["rollout/use_mobil"] == False][
+        "rollout/npc_speed_mean"
+    ]
 
-    bl_sr_um = bl_df['rollout/sr100']
-    bl_sr_num = bl_df.loc[bl_df['rollout/use_mobil'] == False]['rollout/sr100']  
-    
-    fl_sr_um = fl_df.loc[fl_df['rollout/use_mobil'] == True]['rollout/sr100']
-    fl_sr_num = fl_df.loc[fl_df['rollout/use_mobil'] == False]['rollout/sr100']
+    fl_um_npc = fl_df.loc[fl_df["rollout/use_mobil"] == True]["rollout/npc_speed_mean"]
+    fl_num_npc = fl_df.loc[fl_df["rollout/use_mobil"] == False][
+        "rollout/npc_speed_mean"
+    ]
 
+    bl_sr_um = bl_df["rollout/sr100"]
+    bl_sr_num = bl_df.loc[bl_df["rollout/use_mobil"] == False]["rollout/sr100"]
 
+    fl_sr_um = fl_df.loc[fl_df["rollout/use_mobil"] == True]["rollout/sr100"]
+    fl_sr_num = fl_df.loc[fl_df["rollout/use_mobil"] == False]["rollout/sr100"]
 
-    fig, ax = plt.subplots(3,2, sharex=True)
-    fig.suptitle(f"E{cycle_key[0]} vs V{cycle_key[1]} - E1 Behind Left vs Front Left - MOBIL vs No MOBIL")
-    ax[0,0].set_title("Behind Left - MOBIL")
-    ax[0,1].set_title("Behind Left - No MOBIL")
-    ax[1,0].set_title("Front Left - MOBIL")
-    ax[1,1].set_title("Front Left - No MOBIL")
-    ax[2,0].set_title("Success Rate - MOBIL")
-    ax[2,1].set_title("Success Rate - No MOBIL")
+    fig, ax = plt.subplots(3, 2, sharex=True)
+    fig.suptitle(
+        f"E{cycle_key[0]} vs V{cycle_key[1]} - E1 Behind Left vs Front Left - MOBIL vs No MOBIL"
+    )
+    ax[0, 0].set_title("Behind Left - MOBIL")
+    ax[0, 1].set_title("Behind Left - No MOBIL")
+    ax[1, 0].set_title("Front Left - MOBIL")
+    ax[1, 1].set_title("Front Left - No MOBIL")
+    ax[2, 0].set_title("Success Rate - MOBIL")
+    ax[2, 1].set_title("Success Rate - No MOBIL")
 
-    bl_um_ego.ewm(span=100).mean().plot(x="_step",ax=ax[0,0], grid=True)
-    bl_num_ego.ewm(span=100).mean().plot(x="_step",ax=ax[0,1], grid=True)
-    fl_um_ego.ewm(span=100).mean().plot(x="_step",ax=ax[1,0], grid=True)
-    fl_num_ego.ewm(span=100).mean().plot(x="_step",ax=ax[1,1], grid=True)
+    bl_um_ego.ewm(span=100).mean().plot(x="_step", ax=ax[0, 0], grid=True)
+    bl_num_ego.ewm(span=100).mean().plot(x="_step", ax=ax[0, 1], grid=True)
+    fl_um_ego.ewm(span=100).mean().plot(x="_step", ax=ax[1, 0], grid=True)
+    fl_num_ego.ewm(span=100).mean().plot(x="_step", ax=ax[1, 1], grid=True)
 
-    bl_um_npc.ewm(span=100).mean().plot(x="_step",ax=ax[0,0], grid=True)
-    bl_num_npc.ewm(span=100).mean().plot(x="_step",ax=ax[0,1], grid=True)
-    fl_um_npc.ewm(span=100).mean().plot(x="_step",ax=ax[1,0], grid=True)
-    fl_num_npc.ewm(span=100).mean().plot(x="_step",ax=ax[1,1], grid=True)
+    bl_um_npc.ewm(span=100).mean().plot(x="_step", ax=ax[0, 0], grid=True)
+    bl_num_npc.ewm(span=100).mean().plot(x="_step", ax=ax[0, 1], grid=True)
+    fl_um_npc.ewm(span=100).mean().plot(x="_step", ax=ax[1, 0], grid=True)
+    fl_num_npc.ewm(span=100).mean().plot(x="_step", ax=ax[1, 1], grid=True)
 
-    bl_sr_um.ewm(span=100).mean().plot(x="_step",ax=ax[2,0], grid=True)
-    bl_sr_num.ewm(span=100).mean().plot(x="_step",ax=ax[2,1], grid=True)
-    fl_sr_um.ewm(span=100).mean().plot(x="_step",ax=ax[2,0], grid=True)
-    fl_sr_num.ewm(span=100).mean().plot(x="_step",ax=ax[2,1], grid=True)
+    bl_sr_um.ewm(span=100).mean().plot(x="_step", ax=ax[2, 0], grid=True)
+    bl_sr_num.ewm(span=100).mean().plot(x="_step", ax=ax[2, 1], grid=True)
+    fl_sr_um.ewm(span=100).mean().plot(x="_step", ax=ax[2, 0], grid=True)
+    fl_sr_num.ewm(span=100).mean().plot(x="_step", ax=ax[2, 1], grid=True)
 
-    ax[0,0].legend(["Ego Speed", "NPC Speed"])
-    ax[0,1].legend(["Ego Speed", "NPC Speed"])
-    ax[1,0].legend(["Ego Speed", "NPC Speed"])
-    ax[1,1].legend(["Ego Speed", "NPC Speed"])
-    ax[2,0].legend(["MOBIL", "No MOBIL"])
-    ax[2,1].legend(["MOBIL", "No MOBIL"])
+    ax[0, 0].legend(["Ego Speed", "NPC Speed"])
+    ax[0, 1].legend(["Ego Speed", "NPC Speed"])
+    ax[1, 0].legend(["Ego Speed", "NPC Speed"])
+    ax[1, 1].legend(["Ego Speed", "NPC Speed"])
+    ax[2, 0].legend(["MOBIL", "No MOBIL"])
+    ax[2, 1].legend(["MOBIL", "No MOBIL"])
 
-    ax[0,0].set_ylim([10, 35])
-    ax[0,1].set_ylim([10, 35])
-    ax[1,0].set_ylim([10, 35])
-    ax[1,1].set_ylim([10, 35])
+    ax[0, 0].set_ylim([10, 35])
+    ax[0, 1].set_ylim([10, 35])
+    ax[1, 0].set_ylim([10, 35])
+    ax[1, 1].set_ylim([10, 35])
 
-    ax[2,0].set_ylim([0, 1])
-    ax[2,1].set_ylim([0, 1])
+    ax[2, 0].set_ylim([0, 1])
+    ax[2, 1].set_ylim([0, 1])
     plt.show()
-
 
     # train_ego = config["train_ego"]
 

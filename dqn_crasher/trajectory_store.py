@@ -2,8 +2,8 @@ import os
 import json
 from buffers import Transition
 
-class TrajectoryStore(object):
 
+class TrajectoryStore(object):
     def __init__(self, file_path: str = "trajectories/all_episodes.jsonl"):
         # Holds completed episodes: { episode_idx: [ {state,action,next_state,reward}, … ] }
         self.episodes = {}
@@ -18,10 +18,10 @@ class TrajectoryStore(object):
         self.metadata = None
 
     def reset_filepath(self, step):
-        split = self.original_file_path.split('/')
-        split[-2] += f'/{step}'
+        split = self.original_file_path.split("/")
+        split[-2] += f"/{step}"
         file_path = os.path.join(*split)
-        file_path = '/' + file_path
+        file_path = "/" + file_path
 
         self.dirpath = os.path.dirname(file_path)
         if self.dirpath:
@@ -45,12 +45,14 @@ class TrajectoryStore(object):
 
         # Convert numpy arrays to lists, ints/floats to native types
         entry = {
-            "state":      transition.state.tolist(),
-            "action":     transition.action.tolist(),
-            "next_state": None if transition.next_state is None else transition.next_state.tolist(),
-            "reward":     float(transition.reward),
-            "ttc_x":      info['ttc_x'],
-            "ttc_y":      info['ttc_y']
+            "state": transition.state.tolist(),
+            "action": transition.action.tolist(),
+            "next_state": None
+            if transition.next_state is None
+            else transition.next_state.tolist(),
+            "reward": float(transition.reward),
+            "ttc_x": info["ttc_x"],
+            "ttc_y": info["ttc_y"],
         }
         self.episodes[self.current_episode].append(entry)
 
@@ -63,10 +65,7 @@ class TrajectoryStore(object):
         if ep is None:
             return
 
-        record = {
-            "episode": ep,
-            "transitions": self.episodes.pop(ep)
-        }
+        record = {"episode": ep, "transitions": self.episodes.pop(ep)}
 
         # Append one JSON object per line
         with open(self.file_path, "a") as f:
@@ -75,11 +74,11 @@ class TrajectoryStore(object):
 
         self.current_episode = None
 
-    def save_metadata(self, config : dict):
+    def save_metadata(self, config: dict):
         if self.metadata is None:
             self.metadata = config
-        metadata_file = os.path.join(self.dirpath, 'metadata.json')
-        with open(metadata_file, 'w') as f:
+        metadata_file = os.path.join(self.dirpath, "metadata.json")
+        with open(metadata_file, "w") as f:
             json.dump(config, f)
 
     def load(self, file_path: str = None):

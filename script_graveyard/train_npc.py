@@ -29,12 +29,11 @@ from arguments import Args
 
 
 if __name__ == "__main__":
-
     args = tyro.cli(Args)
     if args.cuda:
-        device = torch.device("cuda" if torch.cuda.is_available()  else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     elif args.metal:
-        device = torch.device("mps" if torch.backends.mps.is_available()  else "cpu")
+        device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
     else:
         device = torch.device("cpu")
 
@@ -43,7 +42,7 @@ if __name__ == "__main__":
     # If model folder not created yet, create it
     if not os.path.exists(args.model_folder):
         os.makedirs(args.model_folder)
-    
+
     ma_config = load_config("env_configs/multi_agent.yaml")
 
     ego_model = "E0_MOBIL.pth"
@@ -52,16 +51,28 @@ if __name__ == "__main__":
     ego_version = 0
     npc_version = 0
 
-
     # ma_config['adversarial'] = False
     # ma_config['normalize_reward'] = True
     # ma_config['collision_reward'] = -1
-    env = gym.make('crash-v0', config=ma_config, render_mode='rgb_array')
-    trajectory_path = args.trajectories_folder+ f'/E{ego_version}_V{npc_version}_TrainEgo_False'
-    ego_agent = DQN_Agent(env, args, device, save_trajectories=args.save_trajectories, multi_agent=True, trajectory_path=trajectory_path, ego_or_npc='NPC', override_obs=10)
+    env = gym.make("crash-v0", config=ma_config, render_mode="rgb_array")
+    trajectory_path = (
+        args.trajectories_folder + f"/E{ego_version}_V{npc_version}_TrainEgo_False"
+    )
+    ego_agent = DQN_Agent(
+        env,
+        args,
+        device,
+        save_trajectories=args.save_trajectories,
+        multi_agent=True,
+        trajectory_path=trajectory_path,
+        ego_or_npc="NPC",
+        override_obs=10,
+    )
 
     # Random UUID
     run_id = wandb.util.generate_id()
-    train_ego(env, ego_agent, args, device, model_path=f'npc_models/npc_1_1_1/train_npc.pth')
+    train_ego(
+        env, ego_agent, args, device, model_path=f"npc_models/npc_1_1_1/train_npc.pth"
+    )
 
     env.close()
