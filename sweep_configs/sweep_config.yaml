@@ -1,4 +1,4 @@
-program: main.py
+program: dqn-crasher
 
 method: grid
 
