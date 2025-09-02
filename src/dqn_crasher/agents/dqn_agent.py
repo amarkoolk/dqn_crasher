@@ -241,7 +241,8 @@ class DQN_Agent(object):
 
     def load_model(self, path):
         try:
-            self.policy_net.load_state_dict(torch.load(path))
+            weights = torch.load(path, weights_only=True, map_location = self.device)
+            self.policy_net.load_state_dict(weights)
             self.target_net.load_state_dict(self.policy_net.state_dict())
             print(f"Model Loaded from {path}")
         except:

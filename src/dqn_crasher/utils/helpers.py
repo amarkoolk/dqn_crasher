@@ -225,7 +225,7 @@ def set_policy(class_type, config, device):
         if config.get("train_ego", False) is False:
             agent.load_model(config.get("ego_model", ""))
         dqn_policy = class_type(
-            agent, trajectory_save_path, config.get("train_ego", False)
+            agent, trajectory_save_path, config.get("train_ego", False), config.get("initial_model", None)
         )
         return dqn_policy
     elif class_type == MobilPolicy:

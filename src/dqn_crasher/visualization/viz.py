@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 
-from src.dqn_crasher.utils.trajectory_store import TrajectoryStore
+from dqn_crasher.utils.trajectory_store import TrajectoryStore
 
 
 def get_state_slices(state_spec):
@@ -560,7 +560,7 @@ def load_visualizer_and_episodes(
         name2 = override_name2
 
     # Load episodes
-    ep_fn = f"{file1}.jsonl"
+    ep_fn = f"dqn_crasher.scenarios.{file1}.jsonl"
     ep_path = os.path.join(data_dir, ep_fn)
     store = TrajectoryStore(ep_path)
     episodes = store.load(ep_path)
@@ -592,10 +592,10 @@ RELATIVE_MAP = {
 STATE_SLICES = get_state_slices(STATE_SPEC)
 
 
-data_dir1 = "../mobil_vs_scenarios/episodes/test"
-data_dir2 = "/u/ark8su/safetyh/dqn_crasher/dqn_crasher/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize/2.0766370110834996e-05_512_2_1028/episodes/test_1000000"
-data_dir3 = "/u/ark8su/safetyh/dqn_crasher/dqn_crasher/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize/0.009912680573756697_512_2_512/episodes/test_1000000"
-scenario = "scenarios.IdleFaster"
+data_dir1 = "/p/crash/eval_heldout_mobil_scenarios/episodes/test/0"
+# data_dir2 = "/u/ark8su/safetyh/dqn_crasher/dqn_crasher/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize/2.0766370110834996e-05_512_2_1028/episodes/test_1000000"
+# data_dir3 = "/u/ark8su/safetyh/dqn_crasher/dqn_crasher/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize/0.009912680573756697_512_2_512/episodes/test_1000000"
+scenario = "policies.MobilPolicy.adjacent_left"
 mp4_path = os.path.join(data_dir1, "mp4s")
 os.makedirs(mp4_path, exist_ok=True)
 vis, episodes, name11, name21 = load_visualizer_and_episodes(
@@ -610,50 +610,49 @@ vis, episodes, name11, name21 = load_visualizer_and_episodes(
 )
 
 
-vis2, episodes2, name12, name22 = load_visualizer_and_episodes(
-    data_dir2,
-    STATE_SLICES,
-    relative_map=RELATIVE_MAP,
-    ego_size=(5, 2),
-    npc_size=(5, 2),
-    lane_markings=[(-6, "solid"), (-2, "dashed"), (2, "solid")],
-    scenario=scenario,
-    color_1="green",
-    color_2="red",
-    mobil=False,
-    override_name2="rose-sweep-126",
-)
+# vis2, episodes2, name12, name22 = load_visualizer_and_episodes(
+#     data_dir2,
+#     STATE_SLICES,
+#     relative_map=RELATIVE_MAP,
+#     ego_size=(5, 2),
+#     npc_size=(5, 2),
+#     lane_markings=[(-6, "solid"), (-2, "dashed"), (2, "solid")],
+#     scenario=scenario,
+#     color_1="green",
+#     color_2="red",
+#     mobil=False,
+#     override_name2="rose-sweep-126",
+# )
 
-vis3, episodes3, name13, name23 = load_visualizer_and_episodes(
-    data_dir3,
-    STATE_SLICES,
-    relative_map=RELATIVE_MAP,
-    ego_size=(5, 2),
-    npc_size=(5, 2),
-    lane_markings=[(-6, "solid"), (-2, "dashed"), (2, "solid")],
-    scenario=scenario,
-    color_1="green",
-    color_2="purple",
-    mobil=False,
-    override_name2="confused-sweep-51",
-)
+# vis3, episodes3, name13, name23 = load_visualizer_and_episodes(
+#     data_dir3,
+#     STATE_SLICES,
+#     relative_map=RELATIVE_MAP,
+#     ego_size=(5, 2),
+#     npc_size=(5, 2),
+#     lane_markings=[(-6, "solid"), (-2, "dashed"), (2, "solid")],
+#     scenario=scenario,
+#     color_1="green",
+#     color_2="purple",
+#     mobil=False,
+#     override_name2="confused-sweep-51",
+# )
 
+for ep_key in list(episodes.keys()):
 
-ep_key = list(episodes.keys())[0]
+    transition1 = episodes[ep_key]
+    # transition2 = episodes2[ep_key]
+    # transition3 = episodes3[ep_key]
+    current_file_path = os.path.abspath(__file__)
+    save_file = os.path.join(os.path.dirname(current_file_path), f"{scenario}.pdf")
 
-transition1 = episodes[ep_key]
-transition2 = episodes2[ep_key]
-transition3 = episodes3[ep_key]
-current_file_path = os.path.abspath(__file__)
-save_file = os.path.join(os.path.dirname(current_file_path), f"{scenario}.pdf")
+    vis_list = [vis]#, vis2, vis3]
+    transition_list = [transition1]#, transition2, transition3]
+    cutin_list = [False, True, True]
 
-vis_list = [vis, vis2, vis3]
-transition_list = [transition1, transition2, transition3]
-cutin_list = [False, True, True]
-
-TrajectoryVisualizer.plot_episodes_with_bboxes_compare(
-    vis_list, transition_list, cutin_list
-)
+    TrajectoryVisualizer.plot_episodes_with_bboxes_compare(
+        vis_list, transition_list, cutin_list
+    )
 
 
 # data_dir2 = '../sweep_5stack_batch_size/256_2_512/episodes/test_940025'

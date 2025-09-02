@@ -19,7 +19,7 @@ from dqn_crasher.utils.utils import DeviceHelper
 
 
 def main():
-    config = load_pkg_yaml("configs/model/dqn_vs_scenarios.yaml")
+    config = load_pkg_yaml("configs/model/eval_dqn_vs_holdout.yaml")
     gym_config = load_pkg_yaml("configs/env/multi_agent.yaml")
     gym_config["adversarial"] = False
     gym_config["normalize_reward"] = True

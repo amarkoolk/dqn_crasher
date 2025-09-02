@@ -105,48 +105,12 @@ class MultiAgentRunner:
         total_eps = self.cfg.get("testing_episodes", 10)
         eps_done = 0
 
-        if self.cfg.get("track", False):
-            initialize_logging(self.cfg, train_ego=False, eval=True)
-            stats = helpers.initialize_stats()
-            stats["metrics_type"] = "testing"
-
         if self.cfg.get("save_trajectories", False):
             self.A.store.save_metadata(self.cfg)
             self.A.test_store.save_metadata(self.cfg)
 
-        scenario_vs_mobil = isinstance(self.A.policies[0], policies.ScenarioPolicy)
-        if scenario_vs_mobil:
-            policy_iterate = self.A.policies
-        else:
-            policy_iterate = self.B.policies
+        self.test_checkpoint(0)
 
-        pbar = tqdm(total=total_eps * len(policy_iterate))
-
-        policy_stats = {}
-
-        for i in range(len(policy_iterate)):
-            policy_name = str(type(policy_iterate[i]).__name__)
-            if policy_name not in policy_stats:
-                policy_stats[policy_name] = helpers.initialize_stats()
-
-            for j in range(total_eps):
-                if scenario_vs_mobil:
-                    self.A.reset(i, test=True)
-                    self.B.reset(test=True)
-                else:
-                    self.A.reset(test=True)
-                    self.B.reset(i, test=True)
-                self._set_config()
-                _ = self._run_episode(
-                    train_player=None, t_start=0, stats=stats, pbar=None
-                )
-                eps_done += 1
-
-                if pbar is not None:
-                    pbar.update(1)
-
-        if pbar:
-            pbar.close()
         wandb.finish()
 
     def test_checkpoint(self, checkpoint_step):
@@ -175,6 +139,8 @@ class MultiAgentRunner:
         if isinstance(self.B, policies.PolicyDistribution):
             for policy in self.B.policies:
                 policy.test_store.reset_filepath(checkpoint_step)
+
+
 
         if scenario_vs_mobil:
             policy_iterate = self.A.policies

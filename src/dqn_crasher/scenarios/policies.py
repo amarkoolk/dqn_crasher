@@ -44,7 +44,7 @@ class BasePolicy(ABC):
 
 
 class DQNPolicy(BasePolicy):
-    def __init__(self, agent, trajectory_store_dir, train):
+    def __init__(self, agent, trajectory_store_dir, train, init_model = None):
         self.agent: DQN_Agent = agent
         class_name = type(self).__module__ + "." + type(self).__name__
         train_file_path = os.path.join(
@@ -56,6 +56,10 @@ class DQNPolicy(BasePolicy):
         self.store: TrajectoryStore = TrajectoryStore(file_path=train_file_path)
         self.test_store: TrajectoryStore = TrajectoryStore(file_path=test_file_path)
         self.train: bool = train
+
+        if init_model:
+            self.load_model(init_model)
+
 
     def set_train(self, train):
         self.train = train
@@ -90,6 +94,10 @@ class DQNPolicy(BasePolicy):
         if dirpath:
             os.makedirs(dirpath, exist_ok=True)
         self.agent.save_model(file_path)
+
+    def load_model(self, file_path):
+        self.agent.load_model(file_path)
+
 
     def save_state(self):
         """Save and return the current state of the policy."""
@@ -216,9 +224,10 @@ class MobilPolicy(BasePolicy):
         self.store: TrajectoryStore = TrajectoryStore(file_path=train_file_path)
         self.test_store: TrajectoryStore = TrajectoryStore(file_path=test_file_path)
         self.action_space = action_space
+        self.test = False
 
     def reset(self, test=False):
-        pass
+        self.test = test
 
     def set_state(self, ego_state, npc_state):
         pass
@@ -229,6 +238,10 @@ class MobilPolicy(BasePolicy):
         config["gym_config"]["use_mobil"] = True
         config["gym_config"]["controlled_vehicles"] = 1
         config["gym_config"]["other_vehicles"] = 1
+        if self.test:
+            config["gym_config"]["use_spawn_distribution"] = False
+        else:
+            config["gym_config"]["use_spawn_distribution"] = True
 
     def select_action(self, own_state, other_state, t_step=None):
         sampled_action_tensor = torch.tensor(
