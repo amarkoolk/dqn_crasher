@@ -1,0 +1,41 @@
+action:
+  target_speeds:
+    - 15
+    - 16
+    - 17
+    - 18
+    - 19
+    - 20
+    - 21
+    - 22
+    - 23
+    - 24
+    - 25
+    - 26
+    - 27
+    - 28
+    - 29
+    - 30
+    - 31
+    - 32
+    - 33
+    - 34
+  type: DiscreteMetaAction
+duration: 200 # Longer episodes for manual control
+initial_lane_id: null
+initial_speed: 20
+lanes_count: 5 # Increase to 3 lanes for more space
+observation:
+  normalize: false # Keep raw values for collision analysis
+  type: Kinematics
+  vehicles_count: 5 # Observe up to 5 vehicles
+  see_behind: true # Include vehicles behind ego
+  absolute: true # Use absolute world coordinates
+policy_frequency: 1
+vehicles_count: 4 # More traffic for collision scenarios
+collision_reward: -1
+right_lane_reward: 0.1
+high_speed_reward: 0.4
+lane_change_reward: 0
+normalize_reward: True
+adversarial: False
