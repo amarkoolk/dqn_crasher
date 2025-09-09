@@ -42,47 +42,26 @@ class Action(Enum):
 
 
 class ManualController:
-    def __init__(self, config_path="configs/model/dqn_vs_scenarios.yaml", use_model_config=False): 
+    def __init__(self, env_config_path="configs/env/single_agent.yaml"): 
         """Initialize manual controller with environment configuration."""
         
-        if use_model_config:
-            # Load model config and extract environment settings
-            model_config = load_config(config_path)
-            env_name = model_config.get("env_name", "highway-v0")
-            
-            # Create crash-v0 environment config
-            self.config = {
-                "observation": {"type": "Kinematics", "normalize": False, "vehicles_count": 5, "see_behind": True, "absolute": True},
-                "action": {"type": "DiscreteMetaAction", "target_speeds": list(range(15, 35))},
-                "lanes_count": 5,  # Modify this number (2-6 lanes)
-                "vehicles_count": 4,
-                "duration": 200,
-                "initial_lane_id": None,
-                "policy_frequency": 1,
-                "simulation_frequency": 15,
-                # Crash-specific settings
-                "spawn_configs": ["behind_left", "behind_right", "behind_center", "adjacent_left", "adjacent_right", "forward_left", "forward_right", "forward_center"],
-                "mean_distance": 20,
-                "initial_speed": 20,
-                "mean_delta_v": 0,
-                "ttc_x_reward": 4,
-                "ttc_y_reward": 1,
-                "crash_reward": 400,
-                "tolerance": 1e-3,
-            }
-        else:
-            # Load environment configuration
-            self.config = load_config(config_path)
-            env_name = "highway-v0"
-            
-            # Override config for manual control
-            self.config["duration"] = 200  # Longer episodes for manual control
-            self.config["policy_frequency"] = 1  # Responsive control (1 = every frame)
-            self.config["simulation_frequency"] = 15  # Standard simulation frequency
+        # Resolve config path relative to this script's directory
+        if not os.path.isabs(env_config_path):
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            env_config_path = os.path.join(script_dir, "..", env_config_path)
+            env_config_path = os.path.abspath(env_config_path)
+        
+        # Load environment configuration
+        self.config = load_config(env_config_path)
+        
+        # Override config for manual control
+        self.config["duration"] = 200  # Longer episodes for manual control
+        self.config["policy_frequency"] = 1  # Responsive control (1 = every frame)
+        self.config["simulation_frequency"] = 15  # Standard simulation frequency
         
         # Create environment with human rendering
         self.env = gym.make(
-            env_name,  # Use crash-v0 or highway-v0 based on config
+            "highway-v0",  # Use standard highway environment
             config=self.config,
             render_mode="human"
         )
@@ -304,14 +283,12 @@ def main():
     parser.add_argument('--continue-after-crash', action='store_true', 
                        help='Continue playing after crashes instead of quitting')
     parser.add_argument('--config', default='configs/env/single_agent.yaml',
-                       help='Configuration file (environment or model config)')
-    parser.add_argument('--use-model-config', action='store_true',
-                       help='Use model config (crash-v0) instead of environment config (highway-v0)')
+                       help='Environment configuration file (relative to script directory or absolute path)')
     
     args = parser.parse_args()
     
     try:
-        controller = ManualController(args.config, use_model_config=args.use_model_config)
+        controller = ManualController(args.config)
         controller.quit_on_crash = not args.continue_after_crash
         controller.run()
     except KeyboardInterrupt:
