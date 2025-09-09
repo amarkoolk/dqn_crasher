@@ -7,8 +7,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from dqn_crasher.buffers.experience_replay import (PrioritizedExperienceReplay,
-                                                   ReplayMemory, Transition)
+from dqn_crasher.buffers.experience_replay import (
+    PrioritizedExperienceReplay,
+    ReplayMemory,
+    Transition,
+)
 
 
 class DQN(nn.Module):
@@ -241,7 +244,7 @@ class DQN_Agent(object):
 
     def load_model(self, path):
         try:
-            weights = torch.load(path, weights_only=True, map_location = self.device)
+            weights = torch.load(path, weights_only=True, map_location=self.device)
             self.policy_net.load_state_dict(weights)
             self.target_net.load_state_dict(self.policy_net.state_dict())
             print(f"Model Loaded from {path}")

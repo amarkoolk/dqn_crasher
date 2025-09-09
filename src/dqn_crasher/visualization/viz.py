@@ -639,15 +639,14 @@ vis, episodes, name11, name21 = load_visualizer_and_episodes(
 # )
 
 for ep_key in list(episodes.keys()):
-
     transition1 = episodes[ep_key]
     # transition2 = episodes2[ep_key]
     # transition3 = episodes3[ep_key]
     current_file_path = os.path.abspath(__file__)
     save_file = os.path.join(os.path.dirname(current_file_path), f"{scenario}.pdf")
 
-    vis_list = [vis]#, vis2, vis3]
-    transition_list = [transition1]#, transition2, transition3]
+    vis_list = [vis]  # , vis2, vis3]
+    transition_list = [transition1]  # , transition2, transition3]
     cutin_list = [False, True, True]
 
     TrajectoryVisualizer.plot_episodes_with_bboxes_compare(

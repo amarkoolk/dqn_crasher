@@ -44,7 +44,7 @@ class BasePolicy(ABC):
 
 
 class DQNPolicy(BasePolicy):
-    def __init__(self, agent, trajectory_store_dir, train, init_model = None):
+    def __init__(self, agent, trajectory_store_dir, train, init_model=None):
         self.agent: DQN_Agent = agent
         class_name = type(self).__module__ + "." + type(self).__name__
         train_file_path = os.path.join(
@@ -59,7 +59,6 @@ class DQNPolicy(BasePolicy):
 
         if init_model:
             self.load_model(init_model)
-
 
     def set_train(self, train):
         self.train = train
@@ -97,7 +96,6 @@ class DQNPolicy(BasePolicy):
 
     def load_model(self, file_path):
         self.agent.load_model(file_path)
-
 
     def save_state(self):
         """Save and return the current state of the policy."""

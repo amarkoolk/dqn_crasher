@@ -11,8 +11,7 @@ from create_env import make_vector_env
 from dqn_agent import DQN_Agent
 from gymnasium.vector import AsyncVectorEnv
 from helpers import make_step_actions, unpack_states
-from scenarios import (CutIn, IdleFaster, IdleSlower, Slowdown,
-                       SlowdownSameLane, SpeedUp)
+from scenarios import CutIn, IdleFaster, IdleSlower, Slowdown, SlowdownSameLane, SpeedUp
 from tqdm import tqdm
 
 if __name__ == "__main__":

@@ -11,8 +11,13 @@ import torch
 
 from dqn_crasher.agents.dqn_agent import DQN_Agent
 from dqn_crasher.scenarios import policies, scenarios
-from dqn_crasher.scenarios.policies import (BasePolicy, DQNPolicy, MobilPolicy,
-                                            PolicyDistribution, ScenarioPolicy)
+from dqn_crasher.scenarios.policies import (
+    BasePolicy,
+    DQNPolicy,
+    MobilPolicy,
+    PolicyDistribution,
+    ScenarioPolicy,
+)
 
 
 def make_players(config, gym_config, device):
@@ -225,7 +230,10 @@ def set_policy(class_type, config, device):
         if config.get("train_ego", False) is False:
             agent.load_model(config.get("ego_model", ""))
         dqn_policy = class_type(
-            agent, trajectory_save_path, config.get("train_ego", False), config.get("initial_model", None)
+            agent,
+            trajectory_save_path,
+            config.get("train_ego", False),
+            config.get("initial_model", None),
         )
         return dqn_policy
     elif class_type == MobilPolicy:

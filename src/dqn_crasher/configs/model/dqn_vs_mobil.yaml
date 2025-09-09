@@ -4,19 +4,10 @@ env_name: "crash-v0"
 architecture: "DQN"
 track: True
 device: "cuda"
-initial_model: /p/crash/sweep_5stack_lr_batch_size_numhidden_hiddensize/2.0766370110834996e-05_512_2_1028/models/model_1000000.pth
 
 policy_A:
   - policies.DQNPolicy
 policy_B:
-  - scenarios.IdleSlower
-  - scenarios.IdleFaster
-  - scenarios.CutIn
-  - scenarios.CutInSlowDown
-  - policies.MobilPolicy.behind_center
-  - policies.MobilPolicy.forward_center
-  - policies.MobilPolicy.adjacent_left
-  - policies.MobilPolicy.adjacent_right
   - policies.MobilPolicy.behind_left
   - policies.MobilPolicy.behind_right
   - policies.MobilPolicy.forward_left
@@ -24,7 +15,7 @@ policy_B:
 
 frame_stack: 5
 render: False
-train_ego: False
+train_ego: True
 
 # NN
 batch_size: 512
@@ -45,6 +36,6 @@ total_timesteps: 1000000
 test_interval: 10000
 
 save_trajectories: True
-root_directory: "/p/crash/eval_trained_vs_8_vs_all"
+root_directory: "/p/crash/dqn_vs_4mobil"
 trajectory_path: "episodes"
 model_save_path: "models"

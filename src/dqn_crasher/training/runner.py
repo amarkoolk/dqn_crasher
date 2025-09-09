@@ -13,8 +13,11 @@ import dqn_crasher.utils.helpers as helpers
 import wandb
 from dqn_crasher.agents.dqn_agent import DQN_Agent
 from dqn_crasher.buffers.experience_replay import Transition
-from dqn_crasher.utils.wandb_logging import (initialize_logging,
-                                             log_checkpoint_summary, log_stats)
+from dqn_crasher.utils.wandb_logging import (
+    initialize_logging,
+    log_checkpoint_summary,
+    log_stats,
+)
 
 
 class MultiAgentRunner:
@@ -139,8 +142,6 @@ class MultiAgentRunner:
         if isinstance(self.B, policies.PolicyDistribution):
             for policy in self.B.policies:
                 policy.test_store.reset_filepath(checkpoint_step)
-
-
 
         if scenario_vs_mobil:
             policy_iterate = self.A.policies

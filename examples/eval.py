@@ -20,10 +20,17 @@ from config import load_config
 from create_env import make_env, make_vector_env
 from dqn_agent import DQN, DQN_Agent, TrajectoryStore
 from model_pool import ModelPool
-from multi_agent_dqn import (agent_eval, agent_vs_mobil, ego_vs_npc,
-                             ego_vs_npc_pool, multi_agent_eval,
-                             multi_agent_training_loop, npc_vs_ego,
-                             npc_vs_ego_pool, pool_evaluation)
+from multi_agent_dqn import (
+    agent_eval,
+    agent_vs_mobil,
+    ego_vs_npc,
+    ego_vs_npc_pool,
+    multi_agent_eval,
+    multi_agent_training_loop,
+    npc_vs_ego,
+    npc_vs_ego_pool,
+    pool_evaluation,
+)
 from multi_agent_pool import multi_agent_loop
 from tqdm import tqdm
 from wandb_logging import initialize_logging
