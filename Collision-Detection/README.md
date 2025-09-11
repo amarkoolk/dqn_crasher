@@ -1,6 +1,6 @@
 # Collision Detection Research
 
-This folder contains the research infrastructure for analyzing collision directionality in highway driving scenarios.
+This folder contains a clean setup for collision detection research using manual control to analyze collision directionality in highway driving scenarios.
 
 ## Overview
 
@@ -8,36 +8,28 @@ This research focuses on:
 
 1. **Collision Detection**: Identifying when collisions occur between vehicles
 2. **Directionality Analysis**: Determining the direction and type of collision (rear-end, side-swipe, head-on)
-3. **Crash Reproduction**: Manual control and scenario replay for crash analysis
+3. **Crash Reproduction**: Manual control for crash analysis and research
 
 ## Key Components
 
-### Core Training Infrastructure
+### Manual Control
 
-- `main.py` - Main training entry point
-- `runner.py` - Multi-agent training runner
-- `agents/dqn_agent.py` - DQN agent implementation
-- `utils/` - Helper utilities and observation processing
+- `manual_control.py` - Keyboard-controlled vehicle for collision research
 
 ### Environment Configuration
 
 - `configs/env/` - Environment configurations with Kinematics observation
-- `configs/model/` - Model training configurations
+  - `single_agent.yaml` - Single-agent configuration for manual control
+  - `multi_agent.yaml` - Multi-agent configuration
 
-### Scenario Management
+### Utilities
 
-- `scenarios/` - Scenario definitions and policy implementations
-- `examples/crash_wrappers.py` - Crash-focused environment wrappers
+- `utils/config.py` - Configuration loading utility
 
-### Visualization & Analysis
+### Documentation & Visualization
 
-- `viz/viz.py` - Trajectory visualization with oriented bounding boxes
-- `examples/crash_analysis.py` - Crash analysis tools
-- `examples/trajectory_parsing.py` - Trajectory parsing utilities
-
-### Manual Control (Keyboard)
-
-- `examples/manual_control.py` - Keyboard control implementation (to be created)
+- `docs/` - Documentation and observation references
+- `viz/` - Trajectory visualization tools (for future analysis)
 
 ## Observation Configuration
 
@@ -48,52 +40,63 @@ Uses **KinematicObservation** with:
 - **Absolute positioning**: True (world coordinates)
 - **See behind**: True (observes vehicles behind ego)
 
+### Traffic Configuration
+
+Both configurations include **continuous vehicle spawning** to ensure the road stays populated:
+
+- **vehicles_count**: Initial number of vehicles spawned at episode start
+- **spawn_probability**: Probability (0.0-1.0) of spawning new vehicles each simulation step
+  - `single_agent.yaml`: 0.5 probability (moderate traffic)
+  - `multi_agent.yaml`: 0.6 probability (heavier traffic)
+
 Reference: [Highway-Env Observations](https://highway-env.farama.org/observations/)
 
 ## Usage
 
-### Basic Environment Setup
+### Manual Control
+
+Run the manual control script to start keyboard-controlled driving:
+
+```bash
+# Basic usage with default single-agent config
+python manual_control.py
+
+# Use multi-agent configuration
+python manual_control.py --config configs/env/multi_agent.yaml
+
+# Continue playing after crashes (instead of quitting)
+python manual_control.py --continue-after-crash
+```
+
+### Controls
+
+- **Arrow Keys**: Vehicle control (left/right for lane changes, up/down for speed)
+- **Space**: Emergency brake
+- **R**: Reset environment
+- **Q**: Quit
+
+### Environment Setup
+
+The environment configurations are optimized for collision research:
 
 ```python
 import gymnasium as gym
-from configs.env.multi_agent import load_config
+from utils.config import load_config
 
-config = load_config("multi_agent.yaml")
-env = gym.make("crash-v0", config=config, render_mode="rgb_array")
-```
-
-### Manual Control
-
-```python
-# Run manual control for crash reproduction
-python examples/manual_control.py
-```
-
-### Trajectory Analysis
-
-```python
-# Analyze stored trajectories
-python examples/crash_analysis.py
-```
-
-### Visualization
-
-```python
-# Visualize episodes with bounding boxes
-from viz.viz import TrajectoryVisualizer
-vis.plot_episode_with_bboxes(transitions)
+config = load_config("configs/env/single_agent.yaml")
+env = gym.make("highway-v0", config=config, render_mode="human")
 ```
 
 ## Research Goals
 
-1. **Collision Geometry**: Analyze vehicle positions and velocities at collision
-2. **Directionality Classification**: Classify collision types based on relative motion
-3. **Crash Reproduction**: Use manual control to reproduce specific crash scenarios
-4. **Validation**: Verify directionality detection against known crash scenarios
+1. **Collision Geometry**: Analyze vehicle positions and velocities at collision using manual control
+2. **Directionality Classification**: Classify collision types (rear-end, side-swipe, head-on) based on relative motion
+3. **Crash Reproduction**: Use keyboard control to reproduce and study specific crash scenarios
+4. **Real-time Analysis**: Detect collision states and directionality during manual driving
 
-## Next Steps
+## Getting Started
 
-1. Implement keyboard control for manual crash reproduction
-2. Develop collision directionality detection algorithm
-3. Create collision classification system
-4. Validate against recorded crash scenarios
+1. Run `python manual_control.py` to start manual driving
+2. Use keyboard controls to explore different collision scenarios
+3. Observe collision detection and analysis output in real-time
+4. Experiment with different environment configurations

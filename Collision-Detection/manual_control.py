@@ -20,8 +20,8 @@ import sys
 import time
 from enum import Enum
 
-# Add parent directory to path for imports
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+# Add current directory to path for imports  
+sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
 import gymnasium as gym
 import highway_env
@@ -48,7 +48,7 @@ class ManualController:
         # Resolve config path relative to this script's directory
         if not os.path.isabs(env_config_path):
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            env_config_path = os.path.join(script_dir, "..", env_config_path)
+            env_config_path = os.path.join(script_dir, env_config_path)
             env_config_path = os.path.abspath(env_config_path)
         
         # Load environment configuration

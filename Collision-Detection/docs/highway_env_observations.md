@@ -169,3 +169,4 @@ When using frame stacking (temporal history), the observation becomes:
 - [Highway-Env Observations Documentation](https://highway-env.farama.org/observations/)
 - [Highway-Env GitHub Repository](https://github.com/Farama-Foundation/HighwayEnv)
 - [Gymnasium Environment Documentation](https://gymnasium.farama.org/)
+

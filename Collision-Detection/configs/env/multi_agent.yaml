@@ -39,7 +39,8 @@ observation:
     vehicles_count: 5
   type: MultiAgentObservation
 policy_frequency: 1
-vehicles_count: 0
+vehicles_count: 8 # Initial vehicle count for traffic
+spawn_probability: 0.6 # Continuous spawning probability per step
 spawn_configs:
   - behind_left
   - behind_right
