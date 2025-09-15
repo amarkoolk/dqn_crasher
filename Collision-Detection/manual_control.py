@@ -145,12 +145,13 @@ class ManualController:
         
         return {'collision_detected': False}
     
-    def analyze_collision_directionality(self, collision_info):
+    def analyze_collision_directionality(self, collision_info, info):
         """
         Analyze collision directionality when collision is detected.
         
         Args:
             collision_info: Collision information from detect_collision_state
+            info: Environment info dict (will be modified to add collision details)
             
         Returns:
             dict: Directionality analysis
@@ -165,7 +166,9 @@ class ManualController:
             'collision_type': 'unknown',
             'impact_angle': None,
             'relative_velocity': None,
-            'closest_vehicle': None
+            'closest_vehicle': None,
+            'ego_type': 'ego',  # First vehicle is always manually controlled
+            'other_type': 'npc'  # All other vehicles are AI-controlled
         }
         
         if collision_info['nearby_vehicles']:
@@ -176,33 +179,51 @@ class ManualController:
             npc_pos = np.array(closest_vehicle['position'])
             npc_vel = np.array(closest_vehicle['velocity'])
             
-            # Calculate relative motion
-            rel_pos = npc_pos - ego_pos
-            rel_vel = npc_vel - ego_vel
+            # Calculate relative motion vectors
+            rel_pos = npc_pos - ego_pos  # Vector from ego to NPC
+            rel_vel = npc_vel - ego_vel  # Relative velocity vector
             
-            # Determine collision angle
+            # Calculate impact angle (angle of collision vector)
             impact_angle = np.arctan2(rel_pos[1], rel_pos[0])
             
             # Classify collision type based on relative position and velocity
             if abs(rel_pos[0]) > abs(rel_pos[1]):  # Longitudinal collision
-                if rel_pos[0] > 0:
-                    collision_type = "rear-end (ego hit from behind)"
-                else:
-                    collision_type = "head-on or ego rear-ended other"
+                if rel_pos[0] > 0:  # NPC is ahead of ego
+                    if rel_vel[0] < 0:  # NPC moving slower than ego (ego catching up)
+                        collision_type = "rear-end (ego rear-ended NPC)"
+                    else:  # NPC moving faster than ego (NPC pulling away, shouldn't collide)
+                        collision_type = "rear-end (unusual - NPC ahead but faster)"
+                else:  # NPC is behind ego
+                    if rel_vel[0] > 0:  # NPC moving faster than ego (NPC catching up)
+                        collision_type = "rear-end (NPC rear-ended ego)"
+                    else:  # Both moving same direction, ego faster
+                        collision_type = "head-on (vehicles approaching each other)"
             else:  # Lateral collision
                 if rel_pos[1] > 0:
                     collision_type = "side-swipe (from left)"
                 else:
                     collision_type = "side-swipe (from right)"
             
+            # Calculate relative speed magnitude
+            relative_speed = np.linalg.norm(rel_vel)
+            
             analysis.update({
                 'collision_type': collision_type,
                 'impact_angle': np.degrees(impact_angle),
-                'relative_velocity': np.linalg.norm(rel_vel),
+                'relative_velocity': relative_speed,
                 'closest_vehicle': closest_vehicle,
                 'relative_position': rel_pos.tolist(),
                 'approach_velocity': rel_vel.tolist()
             })
+            
+            # Add collision info to the environment info dict
+            info['collision'] = {
+                'kind': collision_type,
+                'angle_deg': float(np.degrees(impact_angle)),
+                'relative_speed': float(relative_speed),
+                'ego_type': 'ego',
+                'other_type': 'npc'
+            }
         
         return analysis
     
@@ -240,13 +261,15 @@ class ManualController:
                 print(f"\n*** COLLISION DETECTED at step {step_count} ***")
                 
                 # Analyze collision directionality
-                directionality = self.analyze_collision_directionality(collision_info)
+                directionality = self.analyze_collision_directionality(collision_info, info)
                 if directionality:
                     print(f"Collision Type: {directionality['collision_type']}")
                     print(f"Impact Angle: {directionality['impact_angle']:.1f} degrees")
-                    print(f"Relative Velocity: {directionality['relative_velocity']:.2f} m/s")
+                    print(f"Relative Speed: {directionality['relative_velocity']:.2f} m/s")
+                    print(f"Vehicle Types: {directionality['ego_type']} vs {directionality['other_type']}")
                     print(f"Ego Position: {collision_info['ego_position']}")
                     print(f"Ego Velocity: {collision_info['ego_velocity']}")
+                    print(f"Added to info['collision']: {info.get('collision', 'None')}")
                 
                 if self.quit_on_crash:
                     print("Quitting after crash for analysis...")
