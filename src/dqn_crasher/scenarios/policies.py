@@ -28,7 +28,7 @@ class BasePolicy(ABC):
         pass
 
     @abstractmethod
-    def update(self, transition: Transition, done):
+    def update(self, transition: Transition, done, train):
         """Called only for the training player in train-mode."""
         pass
 
@@ -79,14 +79,17 @@ class DQNPolicy(BasePolicy):
         else:
             return self.agent.predict(own_state)
 
-    def update(self, transition: Transition, done):
-        return self.agent.update(
-            transition.state,
-            transition.action,
-            transition.next_state,
-            transition.reward,
-            done,
-        )
+    def update(self, transition: Transition, done, train):
+        if train:
+            return self.agent.update(
+                transition.state,
+                transition.action,
+                transition.next_state,
+                transition.reward,
+                done,
+            )
+        else:
+            return transition.next_state
 
     def save_model(self, file_path="model.pth"):
         dirpath = os.path.dirname(file_path)
@@ -181,7 +184,7 @@ class ScenarioPolicy(BasePolicy):
         sampled_action_tensor[0, int(action)] = 1.0
         return sampled_action_tensor
 
-    def update(self, transition: Transition, done):
+    def update(self, transition: Transition, done, train):
         next_state = transition.next_state
         return next_state
 
@@ -247,7 +250,7 @@ class MobilPolicy(BasePolicy):
         )
         return sampled_action_tensor
 
-    def update(self, transition: Transition, done):
+    def update(self, transition: Transition, done, train):
         return transition.next_state
 
     def save_state(self):
@@ -291,8 +294,8 @@ class PolicyDistribution(BasePolicy):
     def select_action(self, own_state, other_state, t_step=None):
         return self.current_policy.select_action(own_state, other_state, t_step)
 
-    def update(self, transition: Transition, done):
-        return self.current_policy.update(transition, done)
+    def update(self, transition: Transition, done, train):
+        return self.current_policy.update(transition, done, train)
 
     def save_state(self):
         """Save and return the current state of the policy distribution."""

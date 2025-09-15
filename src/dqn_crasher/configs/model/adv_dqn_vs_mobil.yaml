@@ -8,6 +8,10 @@ device: "cuda"
 policy_A:
   - policies.DQNPolicy
 policy_B:
+  - policies.MobilPolicy.behind_left
+  - policies.MobilPolicy.behind_right
+  - policies.MobilPolicy.forward_left
+  - policies.MobilPolicy.forward_right
   - policies.MobilPolicy.behind_center
   - policies.MobilPolicy.forward_center
   - policies.MobilPolicy.adjacent_left
@@ -36,6 +40,6 @@ total_timesteps: 1000000
 test_interval: 10000
 
 save_trajectories: True
-root_directory: "/p/crash/dqn_vs_4_holdout_mobil"
+root_directory: "/p/crash/dqn_vs_4mobil"
 trajectory_path: "episodes"
 model_save_path: "models"

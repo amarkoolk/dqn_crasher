@@ -26,8 +26,8 @@ class MultiAgentRunner:
         self.cfg: dict = config
         self.gym_cfg: dict = gym_cfg
         self.dev = device
-        self.A = policy_a
-        self.B = policy_b
+        self.A : policies.BasePolicy = policy_a
+        self.B : policies.BasePolicy = policy_b
 
         # Create global dictionary to track specific policy stats
         if "specific_policy_stats" not in globals():
@@ -213,12 +213,17 @@ class MultiAgentRunner:
     def _run_episode(self, train_player, t_start, stats, pbar, checkpoint_step=None):
         total_timesteps = self.cfg.get("total_timesteps", 100000)
 
+        if train_player is None:
+            train = False
+        else:
+            train = True
+
         env = gym.make(self.env_name, config=self.gym_cfg, render_mode="rgb_array")
         obs, info = env.reset()
         ego_s, npc_s = helpers.obs_to_state(
             obs, self.n_obs, self.dev, frame_stack=self.cfg["frame_stack"]
         )
-
+        
         self.A.set_state(ego_s, npc_s)
         self.B.set_state(npc_s, ego_s)
 
@@ -293,8 +298,8 @@ class MultiAgentRunner:
                 ego_s, action_logits_B, next_A, torch.tensor(reward, device=self.dev)
             )
 
-            ego_s = self.A.update(transition_A, term)
-            npc_s = self.B.update(transition_B, term)
+            ego_s = self.A.update(transition_A, term, train)
+            npc_s = self.B.update(transition_B, term, train)
 
             self.A.set_state(ego_s, npc_s)
             self.B.set_state(npc_s, ego_s)

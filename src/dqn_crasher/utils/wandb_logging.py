@@ -62,6 +62,9 @@ def initialize_logging(
 
     init_args = {"config": run_config, "tags": tags}
 
+    if config.get("run_name", "") is not "":
+        init_args["name"] = config.get("run_name")
+
     if not is_sweep:
         init_args["project"] = config.get("wandb_project_name", "safetyh")
 

@@ -1,5 +1,6 @@
 import os
 import sys
+import argparse
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), ".")))
 
@@ -19,7 +20,13 @@ from dqn_crasher.utils.utils import DeviceHelper
 
 
 def main():
-    config = load_pkg_yaml("configs/model/eval_dqn_vs_holdout.yaml")
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("env_config")
+    args = parser.parse_args()
+
+
+    config = load_pkg_yaml(f"configs/model/{args.env_config}.yaml")
     gym_config = load_pkg_yaml("configs/env/multi_agent.yaml")
     gym_config["adversarial"] = False
     gym_config["normalize_reward"] = True

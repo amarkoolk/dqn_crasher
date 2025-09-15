@@ -4,18 +4,27 @@ env_name: "crash-v0"
 architecture: "DQN"
 track: True
 device: "cuda"
+initial_model: /p/crash/dqn_vs_4scenarios/models/model_1000000.pth
 
 policy_A:
   - policies.DQNPolicy
 policy_B:
+  - scenarios.IdleSlower
+  - scenarios.IdleFaster
+  - scenarios.CutIn
+  - scenarios.CutInSlowDown
   - policies.MobilPolicy.behind_center
   - policies.MobilPolicy.forward_center
   - policies.MobilPolicy.adjacent_left
   - policies.MobilPolicy.adjacent_right
+  - policies.MobilPolicy.behind_left
+  - policies.MobilPolicy.behind_right
+  - policies.MobilPolicy.forward_left
+  - policies.MobilPolicy.forward_right
 
 frame_stack: 5
 render: False
-train_ego: True
+train_ego: False
 
 # NN
 batch_size: 512
@@ -36,6 +45,7 @@ total_timesteps: 1000000
 test_interval: 10000
 
 save_trajectories: True
-root_directory: "/p/crash/dqn_vs_4_holdout_mobil"
+root_directory: "/p/crash/eval_trained_vs_4scenarios"
 trajectory_path: "episodes"
 model_save_path: "models"
+run_name: eval_trained_vs_4scenarios
