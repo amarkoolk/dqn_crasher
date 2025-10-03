@@ -12,6 +12,7 @@ def initialize_logging(
     checkpoint=False,
     npc_pool_size=None,
     ego_pool_size=None,
+    run_name=None,
 ):
     if wandb.run is not None:
         wandb.finish()
@@ -62,8 +63,11 @@ def initialize_logging(
 
     init_args = {"config": run_config, "tags": tags}
 
-    if config.get("run_name", "") is not "":
-        init_args["name"] = config.get("run_name")
+    if run_name is not None:
+        init_args["name"] = run_name
+    else:
+        if config.get("run_name", "") is not "":
+            init_args["name"] = config.get("run_name")
 
     if not is_sweep:
         init_args["project"] = config.get("wandb_project_name", "safetyh")

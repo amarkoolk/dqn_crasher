@@ -29,6 +29,7 @@ dev = ["ruff", "isort", "mypy", "pytest", "pytest-cov"]
 # console script: `dqn-crasher`
 [project.scripts]
 dqn-crasher = "dqn_crasher.main:main"
+safety-hardening="dqn_crasher.safety_hardening:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

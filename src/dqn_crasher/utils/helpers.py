@@ -20,16 +20,11 @@ from dqn_crasher.scenarios.policies import (
 )
 
 
-def make_players(config, gym_config, device):
-    # build your DQN agents
-    tmp = gym.make(config["env_name"], config=gym_config)
-    act_space = tmp.action_space[0]
-    n_act = act_space.n
-    n_obs = 10 * config.get("frame_stack", 1)
-    tmp.close()
+def make_players(config, device):
 
     # Policy A
     p_A_list = config.get("policy_A")
+    model_A_list = config.get("initial_models_A")
     class_list_A = []
     if len(p_A_list) == 1:
         p_A = pick_policy_function(p_A_list[0], config, device)
@@ -42,11 +37,13 @@ def make_players(config, gym_config, device):
 
     # Policy B
     p_B_list = config.get("policy_B")
+    model_B_list = config.get("initial_models_B")
     class_list_B = []
     if len(p_B_list) == 1:
         p_B = pick_policy_function(p_B_list[0], config, device)
     elif len(p_B_list) > 1:
         for class_str in p_B_list:
+            config["initial_model"] = config.get("initial_model_B", None)
             class_list_B.append(pick_policy_function(class_str, config, device))
         p_B = PolicyDistribution(class_list_B)
     else:

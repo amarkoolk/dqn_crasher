@@ -592,10 +592,10 @@ RELATIVE_MAP = {
 STATE_SLICES = get_state_slices(STATE_SPEC)
 
 
-data_dir1 = "/p/crash/eval_heldout_mobil_scenarios/episodes/test/0"
+data_dir1 = "/p/crash/safety_hardening_frame_stack_local_5_cycle/episodes/NPC_2/test/800001"
 # data_dir2 = "/u/ark8su/safetyh/dqn_crasher/dqn_crasher/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize/2.0766370110834996e-05_512_2_1028/episodes/test_1000000"
 # data_dir3 = "/u/ark8su/safetyh/dqn_crasher/dqn_crasher/bigtemp/ark8su/sweep_5stack_lr_batch_size_numhidden_hiddensize/0.009912680573756697_512_2_512/episodes/test_1000000"
-scenario = "policies.MobilPolicy.adjacent_left"
+scenario = "policies.DQNPolicy"
 mp4_path = os.path.join(data_dir1, "mp4s")
 os.makedirs(mp4_path, exist_ok=True)
 vis, episodes, name11, name21 = load_visualizer_and_episodes(

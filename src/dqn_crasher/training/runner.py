@@ -21,20 +21,21 @@ from dqn_crasher.utils.wandb_logging import (
 
 
 class MultiAgentRunner:
-    def __init__(self, env_name, config, gym_cfg, device, policy_a, policy_b):
-        self.env_name = env_name
+    def __init__(self, config, device, policy_a, policy_b, update_elo: bool = False):
+        self.env_name = config["env_name"]
         self.cfg: dict = config
-        self.gym_cfg: dict = gym_cfg
+        self.gym_cfg: dict = config["gym_config"]
         self.dev = device
         self.A : policies.BasePolicy = policy_a
         self.B : policies.BasePolicy = policy_b
+        self.update_elo = update_elo
 
         # Create global dictionary to track specific policy stats
         if "specific_policy_stats" not in globals():
             globals()["specific_policy_stats"] = {}
 
         # a single env instance just to pull action_space / obs dims
-        tmp = gym.make(env_name, config=gym_cfg)
+        tmp = gym.make(self.env_name, config=self.gym_cfg)
         self.action_space = tmp.action_space[0]
         self.n_actions = self.action_space.n
         self.n_obs = 10 * config.get("frame_stack", 1)
@@ -102,7 +103,7 @@ class MultiAgentRunner:
 
         if pbar:
             pbar.close()
-        wandb.finish()
+        wandb.finish() 
 
     def test(self):
         total_eps = self.cfg.get("testing_episodes", 10)
@@ -139,6 +140,10 @@ class MultiAgentRunner:
             self.A.set_train(False)
             self.A.test_store.reset_filepath(checkpoint_step)
 
+        if isinstance(self.B, policies.DQNPolicy):
+            self.B.set_train(False)
+            self.B.test_store.reset_filepath(checkpoint_step)
+
         if isinstance(self.B, policies.PolicyDistribution):
             for policy in self.B.policies:
                 policy.test_store.reset_filepath(checkpoint_step)
@@ -146,16 +151,19 @@ class MultiAgentRunner:
         if scenario_vs_mobil:
             policy_iterate = self.A.policies
         else:
-            policy_iterate = self.B.policies
+            if isinstance(self.B, policies.PolicyDistribution):
+                policy_iterate = self.B.policies
+            else:
+                policy_iterate = [self.B]
 
         for i in range(len(policy_iterate)):
             for j in range(total_eps):
                 if scenario_vs_mobil:
-                    self.A.reset(i, test=True)
+                    self.A.reset(test=True)
                     self.B.reset(test=True)
                 else:
                     self.A.reset(test=True)
-                    self.B.reset(i, test=True)
+                    self.B.reset(test=True)
                 self._set_config()
 
                 # Run the episode
@@ -253,6 +261,16 @@ class MultiAgentRunner:
                     + classification_source.current_policy.spawn_configs[0]
                 )
 
+        if scenario is None and "spawn_config" in info.keys():
+            scenario = info["spawn_config"]
+
+        if self.update_elo:
+            if self.B.adversarial:
+                model_str = "NPC"
+            else:
+                model_str = "EGO"
+            scenario = f"{model_str}{self.B.policy_idx + 1}"
+
         if self.cfg.get("save_trajectories", False):
             if train_player:
                 self.A.store.start_episode(stats["episode_num"])
@@ -334,6 +352,11 @@ class MultiAgentRunner:
             steps += 1
             if pbar:
                 pbar.update(1)
+
+        if self.update_elo:
+            ego = not self.B.adversarial
+            self.B.update_elos(int(info["crashed"]))
+
 
         if self.cfg.get("track", False):
             # Determine which metric type we're using based on context flags

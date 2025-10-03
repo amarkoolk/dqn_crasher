@@ -8,7 +8,7 @@ from wandb.apis.public import Runs
 
 import wandb
 
-figure_dir = "figures"
+figure_dir = "../figures"
 fig_dir = os.path.join(os.getcwd(), figure_dir)
 results_dir = "results"
 res_dir = os.path.join(os.getcwd(), results_dir)
@@ -32,6 +32,8 @@ if __name__ == "__main__":
         run_history[str(run.name[-4:])] = run.history(
             samples=history.max_step, x_axis="_step", pandas=(True), stream="default"
         )
+
+    
 
     state10_mobil_speed_df = pd.DataFrame(
         run_history["3121"], columns=["_step", "rollout/model_0_speed"]

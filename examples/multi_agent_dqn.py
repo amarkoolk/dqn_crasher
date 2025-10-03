@@ -10,7 +10,7 @@ import torch.nn.functional as F
 from buffers import Transition
 from create_env import make_vector_env
 from dqn_agent import DQN_Agent
-from model_pool import ModelPool
+from dqn_crasher.utils.model_pool import ModelPool
 from scenarios import CutIn, Slowdown, SlowdownSameLane, SpeedUp
 from tqdm import tqdm
 from wandb_logging import initialize_logging, log_stats

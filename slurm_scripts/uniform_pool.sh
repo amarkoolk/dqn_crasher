@@ -14,4 +14,4 @@ module purge
 module load anaconda3
 source activate safetyh
 
-python src/dqn_crasher/main.py dqn_vs_mobil_baseline
+python src/dqn_crasher/safety_hardening_pool.py uniform_model_pool 5

@@ -24,7 +24,7 @@ action:
     type: DiscreteMetaAction
   type: MultiAgentAction
 controlled_vehicles: 2
-duration: 40
+duration: 100
 initial_lane_id: null
 initial_speed: 20
 lanes_count: 2
@@ -50,15 +50,15 @@ spawn_configs:
   - forward_right
   - forward_center
 tolerance: 0.001
-collision_reward: -1
-ttc_x_reward: 0
-ttc_y_reward: 0
+collision_reward: 400
+ttc_x_reward: 4
+ttc_y_reward: 1
 adversarial: True
 normalize_reward: False
 use_mobil: False
 
 # For Ego Vehicle
-right_lane_reward: 0.1
-high_speed_reward: 0.4
+right_lane_reward: 0.0
+high_speed_reward: 0.0
 lane_change_reward: 0
 reward_speed_range: [20, 25]

@@ -7,9 +7,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "."))
 import gymnasium as gym
 import highway_env
 import torch
-from utils.config import load_pkg_yaml
-from utils.helpers import make_players
-from utils.wandb_logging import initialize_logging
+from dqn_crasher.utils.config import load_pkg_yaml
+from dqn_crasher.utils.helpers import make_players
+from dqn_crasher.utils.wandb_logging import initialize_logging
 
 import dqn_crasher.scenarios.policies as policies
 import dqn_crasher.scenarios.scenarios as scenarios
@@ -51,7 +51,7 @@ def main():
     device = DeviceHelper.get(config)
     p_A, p_B = make_players(config, gym_config, device)
 
-    runner = MultiAgentRunner(config["env_name"], config, gym_config, device, p_A, p_B)
+    runner = MultiAgentRunner(config, device, p_A, p_B)
 
     if config.get("train_ego", False):
         runner.train(train_player="A")

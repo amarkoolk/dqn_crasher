@@ -17,7 +17,7 @@ from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 from config import load_config
 from create_env import make_env, make_vector_env
 from dqn_agent import DQN, DQN_Agent, TrajectoryStore
-from model_pool import ModelPool
+from dqn_crasher.utils.model_pool import ModelPool
 from multi_agent_dqn import ego_vs_npc_pool, test_ego_additional_state
 from multi_agent_pool import multi_agent_loop
 from tqdm import tqdm

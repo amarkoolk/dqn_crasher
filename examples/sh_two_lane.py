@@ -19,7 +19,7 @@ from buffers import PrioritizedExperienceReplay, ReplayMemory, Transition
 from config import load_config
 from create_env import make_env, make_vector_env
 from dqn_agent import DQN, DQN_Agent, TrajectoryStore
-from model_pool import ModelPool
+from dqn_crasher.utils.model_pool import ModelPool
 from multi_agent_dqn import (
     ego_vs_npc_pool,
     npc_vs_ego_pool,
@@ -150,7 +150,7 @@ if __name__ == "__main__":
         # Evaluate Each Model Pair
         for ego_version, ego_model in enumerate(ego_models):
             for npc_version, npc_model in enumerate(npc_models):
-                print(f"Ego Mode:l: {ego_model}, Ego Version: {ego_version}")
+                print(f"Ego Model: {ego_model}, Ego Version: {ego_version}")
                 print(f"NPC Model: {npc_model}, NPC Version: {npc_version}")
                 env = gym.make("crash-v0", config=ma_config, render_mode="rgb_array")
 
@@ -288,8 +288,8 @@ if __name__ == "__main__":
 
             ego_pool.set_opponent_elo(npc_pool.model_elo[-1])
             npc_pool.set_opponent_elo(ego_pool.model_elo[-1])
-            ego_pool.update_probabilities(False)
-            npc_pool.update_probabilities(True)
+            ego_pool.update_probabilities()
+            npc_pool.update_probabilities()
 
             print(f"Ego ELOS: {ego_pool.model_elo}")
             print(f"NPC ELOS: {npc_pool.model_elo}")
@@ -328,8 +328,8 @@ if __name__ == "__main__":
 
             ego_pool.set_opponent_elo(npc_pool.model_elo[-1])
             npc_pool.set_opponent_elo(ego_pool.model_elo[-1])
-            ego_pool.update_probabilities(True)
-            npc_pool.update_probabilities(False)
+            ego_pool.update_probabilities()
+            npc_pool.update_probabilities()
 
             print(f"Ego ELOS: {ego_pool.model_elo}")
             print(f"NPC ELOS: {npc_pool.model_elo}")

@@ -1,0 +1,46 @@
+seed: 42
+
+env_name: "crash-v0"
+architecture: "DQN"
+track: True
+device: "cuda"
+
+policy_A:
+  - policies.DQNPolicy
+policy_B:
+  - policies.MobilPolicy.behind_left
+  - policies.MobilPolicy.behind_right
+  - policies.MobilPolicy.forward_left
+  - policies.MobilPolicy.forward_right
+  - policies.MobilPolicy.behind_center
+  - policies.MobilPolicy.forward_center
+  - policies.MobilPolicy.adjacent_left
+  - policies.MobilPolicy.adjacent_right
+
+frame_stack: 5
+render: False
+train_ego: True
+
+# NN
+batch_size: 512
+gamma: 0.8
+start_e: 1.0
+end_e: 0.05
+decay_e: 60000
+tau: 0.005
+lr: 0.00002
+buffer_size: 150000
+buffer_type: "ER"
+num_hidden_layers: 2
+hidden_layer: 1028
+
+checkpoint_testing_episodes: 10
+testing_episodes: 10
+total_timesteps: 1000000
+test_interval: 10000
+
+save_trajectories: True
+root_directory: "/p/crash/dqn_vs_mobil_baseline"
+trajectory_path: "episodes"
+model_save_path: "models"
+run_name: E0_Baseline

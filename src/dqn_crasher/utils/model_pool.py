@@ -1,26 +1,27 @@
 import json
 from copy import deepcopy
 from typing import Union
+from enum import StrEnum, auto
 
 import numpy as np
-from dqn_agent import DQN_Agent
+from dqn_crasher.agents.dqn_agent import DQN_Agent
 
+class Sampling(StrEnum):
+    UNIFORM = auto()
+    PRIORITIZED = auto()
+    TWO_MODEL = auto()
 
 class ModelPool:
     def __init__(
         self,
-        sampling: str = "uniform",
+        sampling: Sampling = Sampling.UNIFORM,
         adjustable_k: bool = False,
-        version: str = "v1",
-        n_obs: int = 10,
+        seed: int = 0
     ):
         self.models: list[Union[DQN_Agent, str]] = []
-        self.n_observations = n_obs
-        self.uniform_sampling = sampling == "uniform"
-        self.prioritized_sampling = sampling == "prioritized"
-        self.two_model_sampling = sampling == "two_model"
+        self.sampling = sampling
         self.adjustable_k = adjustable_k
-        self.rng = np.random.default_rng()
+        self.rng = np.random.default_rng(seed)
         self.model_ep_freq: list[int] = []
         self.model_transition_freq: list[int] = []
         self.model_crash_freq: list[int] = []
@@ -30,9 +31,8 @@ class ModelPool:
         self.model_idx: int = None
         self.size = len(self.models)
         self.cycles = {}
-        self.version = version  # v1, sampling among models, v2 uniform sampling among baseline and strongest model
 
-        print(f"Model Pool Initialized with {sampling} sampling")
+        print(f"Model Pool Initialized with {sampling.name} sampling")
 
         # ELO
         self.opponent_elo = 1000.0
@@ -56,7 +56,7 @@ class ModelPool:
         self.model_evals = [0 for i in range(self.size)]
         self.latest_model = latest_model
 
-        return self.choose_eval_opponent()
+        return True
 
     def choose_eval_opponent(self, randomized: bool = True):
         model_idx = list(range(self.size))
@@ -154,13 +154,11 @@ class ModelPool:
     def choose_model(self):
         if len(self.models) == 0:
             raise ValueError("No models in the pool")
-        if self.uniform_sampling:
+        if self.sampling is Sampling.UNIFORM:
             self.model_idx = self.rng.integers(0, len(self.models))
-            self.model_ep_freq[self.model_idx] += 1
-        elif self.prioritized_sampling:
+        elif self.sampling is Sampling.PRIORITIZED:
             self.model_idx = self.rng.choice(self.size, p=self.model_probability)
-            self.model_ep_freq[self.model_idx] += 1
-        elif self.two_model_sampling:
+        elif self.sampling is Sampling.TWO_MODEL:
             models = [0]
             model_elos = np.asarray(self.model_elo)
             strongest_model_idx = model_elos.argsort()[::-1]
@@ -169,9 +167,11 @@ class ModelPool:
             else:
                 models.append(strongest_model_idx[0])
             self.model_idx = self.rng.choice(models)
-            self.model_ep_freq[self.model_idx] += 1
         else:
             raise ValueError("No sampling method selected")
+        
+        self.model_ep_freq[self.model_idx] += 1
+        return self.model_idx
 
     def predict(self, state):
         if len(self.models) == 0:
@@ -225,7 +225,7 @@ class ModelPool:
         self.model_elo[self.model_idx] = Rb + self.K_factor * (Sb - Eb)
 
     # We track the probability that the selected model can beat the current opponent
-    def update_probabilities(self, ego: bool):
+    def update_probabilities(self):
         cum_sum = 0
         for i in range(self.size):
             self.model_probability[i] = 1 / (

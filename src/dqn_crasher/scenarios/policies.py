@@ -8,6 +8,7 @@ import torch
 from dqn_crasher.buffers.experience_replay import Transition
 from dqn_crasher.utils.trajectory_store import TrajectoryStore
 from dqn_crasher.agents.dqn_agent import DQN_Agent
+from dqn_crasher.utils.model_pool import ModelPool, Sampling
 
 
 class BasePolicy(ABC):
@@ -332,3 +333,56 @@ class PolicyDistribution(BasePolicy):
         ):
             self.current_policy = self.policies[state["current_policy_idx"]]
             self.store = self.current_policy.store
+
+class ModelPoolPolicy(PolicyDistribution):
+
+    def __init__(self, policies : list[DQNPolicy], adversarial : bool = False, sampling : str = "uniform", adjustable_k : bool = False, seed : int = 0):
+        self.policies: list = policies
+        self.policy_idx = None
+        self.current_policy = None
+        self.store = None
+        self.test_store = None
+        self.sampling = sampling
+        self.model_pool = ModelPool(Sampling(sampling), adjustable_k, seed)
+        for policy in self.policies:
+            self.model_pool.add_model(policy.agent)
+        self.seed = seed
+        self.adversarial = adversarial
+        self.eval_num = 0
+        random.seed(seed)
+
+    def add_model(self, policy: DQNPolicy, elo = 1000):
+        self.policies.append(policy)
+        self.model_pool.add_model(policy.agent, elo = elo)
+
+    def reset(self, policy_num=None, test=False):
+        # On Reset Choose New Model
+        if test and self.model_pool.eval:
+            self.model_pool.choose_eval_opponent()
+            self.policy_idx = self.model_pool.model_idx
+        else:
+            self.policy_idx = self.model_pool.choose_model()
+
+        assert self.policy_idx <= (len(self.policies)-1), f"Model Pool Index {self.policy_idx} is greater than Policy List Size {len(self.policies)}"
+        self.current_policy = self.policies[self.policy_idx]
+        self.store = self.current_policy.store
+        self.test_store = self.current_policy.test_store
+        self.current_policy.reset(test)
+
+    def set_opponent_elo(self, elo : float):
+        self.model_pool.set_opponent_elo(elo)
+
+    def update_elos(self, score : bool):
+        if self.adversarial:
+            self.model_pool.update_model_elo(1 - int(score), int(score))
+            self.model_pool.log_model_pool(len(self.policies), self.eval_num, f"E{len(self.policies)}", 1 - int(score), int(score))
+        else:
+            self.model_pool.update_model_elo(int(score), 1-int(score))
+            self.model_pool.log_model_pool(len(self.policies), self.eval_num, f"V{len(self.policies)}", int(score), 1-int(score))
+
+        self.eval_num += 1
+
+    def init_eval(self, eval_episodes: int = 10, latest_model: bool = False):
+        self.model_pool.init_eval(eval_episodes, latest_model)
+
+

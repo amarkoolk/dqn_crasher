@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=dqn_vs_mobil_baseline             # job name
+#SBATCH --job-name=prioritized_model_pool             # job name
 #SBATCH --output=logs/%x_%j.out          # %x=job-name, %j=jobID
 #SBATCH --error=logs/%x_%j.err
 #SBATCH --partition=gpu                   # your GPU partition
@@ -14,4 +14,4 @@ module purge
 module load anaconda3
 source activate safetyh
 
-python src/dqn_crasher/main.py dqn_vs_mobil_baseline
+python src/dqn_crasher/safety_hardening_pool.py prioritized_model_pool 5
