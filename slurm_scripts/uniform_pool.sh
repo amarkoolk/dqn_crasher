@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=dqn_vs_mobil_baseline             # job name
+#SBATCH --job-name=uniform_model_pool             # job name
 #SBATCH --output=logs/%x_%j.out          # %x=job-name, %j=jobID
 #SBATCH --error=logs/%x_%j.err
 #SBATCH --partition=gpu                   # your GPU partition

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-#SBATCH --job-name=dqn_vs_mobil_baseline             # job name
+#SBATCH --job-name=local_sh             # job name
 #SBATCH --output=logs/%x_%j.out          # %x=job-name, %j=jobID
 #SBATCH --error=logs/%x_%j.err
 #SBATCH --partition=gpu                   # your GPU partition
@@ -14,4 +14,4 @@ module purge
 module load anaconda3
 source activate safetyh
 
-python src/dqn_crasher/safety_hardening.py safety_hardening_5_cycles 5
+python src/dqn_crasher/safety_hardening_local.py safety_hardening_5_cycles
