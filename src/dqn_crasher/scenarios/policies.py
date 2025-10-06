@@ -274,13 +274,19 @@ class PolicyDistribution(BasePolicy):
         self.store = self.current_policy.store
         self.test_store = self.current_policy.test_store
         self.seed = seed
+        self.policy_idx = 0
         random.seed(seed)
 
     def reset(self, policy_num=None, test=False):
         if policy_num == None:
-            self.current_policy = random.choice(self.policies)
+            if len(self.policies) > 1:
+                self.policy_idx = random.choice(range(len(self.policies)))
+            else: 
+                self.policy_idx = 0
+            self.current_policy = self.policies[self.policy_idx]
         else:
-            self.current_policy = self.policies[policy_num]
+            self.policy_idx = policy_num
+            self.current_policy = self.policies[self.policy_idx]
 
         self.store = self.current_policy.store
         self.test_store = self.current_policy.test_store

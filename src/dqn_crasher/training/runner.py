@@ -156,8 +156,8 @@ class MultiAgentRunner:
             else:
                 policy_iterate = [self.B]
 
-        for i in range(len(policy_iterate)):
-            for j in range(total_eps):
+        for i in tqdm(range(len(policy_iterate))):
+            for j in tqdm(range(total_eps), leave = False):
                 if scenario_vs_mobil:
                     self.A.reset(test=True)
                     self.B.reset(test=True)
@@ -221,10 +221,12 @@ class MultiAgentRunner:
     def _run_episode(self, train_player, t_start, stats, pbar, checkpoint_step=None):
         total_timesteps = self.cfg.get("total_timesteps", 100000)
 
-        if train_player is None:
-            train = False
-        else:
-            train = True
+        train_A = False
+        train_B = False
+        if train_player == "A":
+            train_A = True
+        elif train_player == "B":
+            train_B = True
 
         env = gym.make(self.env_name, config=self.gym_cfg, render_mode="rgb_array")
         obs, info = env.reset()
@@ -260,6 +262,12 @@ class MultiAgentRunner:
                     + "."
                     + classification_source.current_policy.spawn_configs[0]
                 )
+            elif isinstance(classification_source.current_policy, policies.DQNPolicy):
+                scenario = (
+                    str(type(classification_source.current_policy).__name__)
+                    + str(classification_source.policy_idx)
+                )
+
 
         if scenario is None and "spawn_config" in info.keys():
             scenario = info["spawn_config"]
@@ -313,11 +321,11 @@ class MultiAgentRunner:
                 ego_s, action_logits_A, next_A, torch.tensor(reward, device=self.dev)
             )
             store_transition_B = Transition(
-                ego_s, action_logits_B, next_A, torch.tensor(reward, device=self.dev)
+                npc_s, action_logits_B, next_A, torch.tensor(reward, device=self.dev)
             )
 
-            ego_s = self.A.update(transition_A, term, train)
-            npc_s = self.B.update(transition_B, term, train)
+            ego_s = self.A.update(transition_A, term, train_A)
+            npc_s = self.B.update(transition_B, term, train_B)
 
             self.A.set_state(ego_s, npc_s)
             self.B.set_state(npc_s, ego_s)
@@ -338,12 +346,13 @@ class MultiAgentRunner:
 
             info["rewards"]["total"] = reward
             info["ego_speed"] = (
-                ego_s[0, 3].cpu().numpy() ** 2 + ego_s[0, 4].cpu().numpy() ** 2
+                ego_s[0, -7].cpu().numpy() ** 2 + ego_s[0, -6].cpu().numpy() ** 2
             ) ** 0.5
             info["npc_speed"] = (
-                npc_s[0, 3].cpu().numpy() ** 2 + npc_s[0, 4].cpu().numpy() ** 2
+                npc_s[0, -7].cpu().numpy() ** 2 + npc_s[0, -6].cpu().numpy() ** 2
             ) ** 0.5
             info["scenario"] = scenario
+
 
             # Populate the main stats dictionary
             helpers.populate_stats(info, episode_statistics=stats)

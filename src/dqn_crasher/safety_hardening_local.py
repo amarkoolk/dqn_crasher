@@ -33,8 +33,8 @@ def run_local_training(config, device, cycle, model_dir, init_model_path_A, init
     )
 
 
-    ego_gym_config = load_pkg_yaml("configs/env/multi_agent.yaml")
-    npc_gym_config = load_pkg_yaml("configs/env/multi_agent_adversarial.yaml")
+    ego_gym_config = load_pkg_yaml("configs/env/multi_agent_old.yaml")
+    npc_gym_config = load_pkg_yaml("configs/env/multi_agent_npc.yaml")
 
     ego_gym_config["observation"]["observation_config"]["frame_stack"] = config.get("frame_stack", 1)
     npc_gym_config["observation"]["observation_config"]["frame_stack"] = config.get("frame_stack", 1)
@@ -46,9 +46,13 @@ def run_local_training(config, device, cycle, model_dir, init_model_path_A, init
     tmp.close()
 
     ego_agent = DQN_Agent(n_obs, n_act, act_space, config, device)
+    print(f"SETTING EGO POLICY TRAIN: {train_ego}")
+    print(f"INITIAL MODEL: {init_model_path_A}")
     ego_policy = policies.DQNPolicy(ego_agent, ego_trajectory_save_path, train = train_ego, init_model=init_model_path_A)
 
     npc_agent = DQN_Agent(n_obs, n_act, act_space, config, device)
+    print(f"SETTING NPC POLICY TRAIN: {not train_ego}")
+    print(f"INITIAL MODEL: {init_model_path_B}")
     npc_policy = policies.DQNPolicy(npc_agent, npc_trajectory_save_path, train = not train_ego, init_model=init_model_path_B)
 
 
@@ -76,13 +80,10 @@ def run_local_training(config, device, cycle, model_dir, init_model_path_A, init
     runner.train(train_player="A")
 
 
-
-
 def main():
 
     parser = argparse.ArgumentParser()
     parser.add_argument("env_config")
-    parser.add_argument("cycles")
     args = parser.parse_args()
 
     config = load_pkg_yaml(f"configs/model/{args.env_config}.yaml")
@@ -96,7 +97,7 @@ def main():
                     config.get("model_save_path", "models/model")
                 )
 
-    for cycle in range(1, int(args.cycles) + 1):
+    for cycle in range(1, int(config.get("cycles")) + 1):
 
         # Train NPC
         run_local_training(config, device, cycle, model_dir, ego_model, npc_model, train_ego = False)

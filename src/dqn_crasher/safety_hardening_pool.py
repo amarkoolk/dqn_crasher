@@ -41,7 +41,7 @@ def build_new_dqn_policy(config, device, cycle, init_model, model_str, train : b
     )
 
     if model_str == "EGO":
-        config["gym_config"] = load_pkg_yaml("configs/env/multi_agent.yaml")
+        config["gym_config"] = load_pkg_yaml("configs/env/multi_agent_old.yaml")
     elif model_str == "NPC":
         config["gym_config"] = load_pkg_yaml("configs/env/multi_agent_adversarial.yaml")
 
@@ -67,7 +67,7 @@ def run_pool_training(config, device, cycle, model_dir, init_model, pool, model_
     dqn_agent, dqn_policy = build_new_dqn_policy(config, device, cycle, init_model, model_str, train = True)
 
     if model_str == "EGO":  
-        gym_config = load_pkg_yaml("configs/env/multi_agent.yaml")
+        gym_config = load_pkg_yaml("configs/env/multi_agent_old.yaml")
         train_ego = True
     elif model_str == "NPC":
         gym_config = load_pkg_yaml("configs/env/multi_agent_adversarial.yaml")
