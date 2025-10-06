@@ -35,11 +35,12 @@ hidden_layer: 1028
 
 checkpoint_testing_episodes: 10
 testing_episodes: 10
-total_timesteps: 1000000
+total_timesteps: 500000
 test_interval: 10000
 
 save_trajectories: True
-root_directory: "/p/crash/safety_hardening_frame_stack_local_5_cycle"
+root_directory: "/p/crash/amaas/safety_hardening_frame_stack_local_5_cycle_old_reward"
 trajectory_path: "episodes"
 model_save_path: "models"
 run_name: local_fs_5
+wandb_project_name: 'sh_frame_stack_old_reward'

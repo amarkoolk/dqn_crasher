@@ -6,19 +6,28 @@ track: True
 device: "cuda"
 
 
-policy_A:
-  - policies.DQNPolicy
-policy_B:
-  - policies.DQNPolicy
-
-initial_model_A: /p/crash/dqn_vs_mobil_baseline/models/model_1000000.pth
-
 frame_stack: 5
 render: False
 
 # Safety Hardening
 cycles: 5
-model_pool: "uniform"
+model_pool: "local"
+
+model_directory: /p/crash/amaas/safety_hardening_frame_stack_local_5_cycle/models
+
+models_EGO:
+  - 230025
+  - 350009
+  - 420002
+  - 390000
+  - 380003
+
+models_NPC:
+  - 330010
+  - 180007
+  - 130003
+  - 450007
+  - 390002
 
 # NN
 batch_size: 512
@@ -33,14 +42,14 @@ buffer_type: "ER"
 num_hidden_layers: 2
 hidden_layer: 1028
 
-checkpoint_testing_episodes: 10
+checkpoint_testing_episodes: 100
 testing_episodes: 10
-total_timesteps: 500000
+total_timesteps: 1000000
 test_interval: 10000
 
 save_trajectories: True
-root_directory: "/p/crash/amaas/safety_hardening_frame_stack_uniform_5_cycle_old_reward"
+root_directory: "/p/crash/amaas/best_model/eval_local_5_cycle"
 trajectory_path: "episodes"
 model_save_path: "models"
-run_name: uniform_fs_5
-wandb_project_name: 'sh_frame_stack_old_reward'
+run_name: eval_local_fs_5
+wandb_project_name: 'sh_frame_stack'

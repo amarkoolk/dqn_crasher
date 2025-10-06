@@ -6,19 +6,28 @@ track: True
 device: "cuda"
 
 
-policy_A:
-  - policies.DQNPolicy
-policy_B:
-  - policies.DQNPolicy
-
-initial_model_A: /p/crash/dqn_vs_mobil_baseline/models/model_1000000.pth
-
 frame_stack: 5
 render: False
 
 # Safety Hardening
 cycles: 5
 model_pool: "prioritized"
+
+model_directory: /p/crash/amaas/safety_hardening_frame_stack_prioritized_5_cycle/models
+
+models_EGO:
+  - 380027
+  - 420002
+  - 440002
+  - 300023
+  - 490000
+
+models_NPC:
+  - 200008
+  - 380001
+  - 330000
+  - 80021
+  - 180006
 
 # NN
 batch_size: 512
@@ -33,15 +42,14 @@ buffer_type: "ER"
 num_hidden_layers: 2
 hidden_layer: 1028
 
-checkpoint_testing_episodes: 10
+checkpoint_testing_episodes: 100
 testing_episodes: 10
-tournament_episodes: 100
-total_timesteps: 500000
+total_timesteps: 1000000
 test_interval: 10000
 
 save_trajectories: True
-root_directory: "/p/crash/amaas/safety_hardening_frame_stack_prioritized_5_cycle_old_reward"
+root_directory: "/p/crash/amaas/best_model/eval_prioritized_5_cycle"
 trajectory_path: "episodes"
 model_save_path: "models"
-run_name: prioritized_fs_5
-wandb_project_name: 'sh_frame_stack_old_reward'
+run_name: eval_prioritized_fs_5
+wandb_project_name: 'sh_frame_stack'
