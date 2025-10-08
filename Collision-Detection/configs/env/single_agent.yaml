@@ -24,11 +24,11 @@ action:
 duration: 100 # Longer episodes for manual control
 initial_lane_id: null
 initial_speed: 10
-lanes_count: 4 # Increase to 3 lanes for more space
+lanes_count: 2 # Increase to 3 lanes for more space
 observation:
   normalize: false # Keep raw values for collision analysis
   type: Kinematics
-  vehicles_count: 5 # Observe up to 5 vehicles
+  vehicles_count: 3 # Observe up to 5 vehicles
   see_behind: true # Include vehicles behind ego
   absolute: true # Use absolute world coordinates
 policy_frequency: 1

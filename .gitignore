@@ -16,3 +16,7 @@ models/
 # IDE
 .vscode/
 .idea/
+.github/copilot-instructions.md
+Collision-Detection/docs/COLLISION_CLASSIFICATION_ISSUE.md
+Collision-Detection/docs/collision_math_explained.md
+Collision-Detection/docs/highway_env_observations.md
