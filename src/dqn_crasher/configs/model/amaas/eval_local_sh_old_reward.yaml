@@ -13,6 +13,11 @@ render: False
 cycles: 5
 model_pool: "local"
 
+policy_A:
+  - policies.DQNPolicy
+policy_B:
+  - policies.DQNPolicy
+
 model_directory: /p/crash/amaas/safety_hardening_frame_stack_local_5_cycle_old_reward/models
 
 # NN

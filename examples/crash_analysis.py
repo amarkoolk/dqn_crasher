@@ -17,8 +17,8 @@ class Action(Enum):
     SLOWER = 4
 
 
-trajectory_path = "local_falsification_hardening_traj_all_5/E1_V1_TrainEgo_False/NPC"
-file_name = "0.json"
+trajectory_path = "/p/crash/amaas/eval_local_5_cycle_old_reward/episodes/EGO_1/test/0"
+file_name = "dqn_crasher.scenarios.policies.DQNPolicy.jsonl"
 framerate = 15
 
 with open(os.path.join(trajectory_path, file_name), "r") as f:
