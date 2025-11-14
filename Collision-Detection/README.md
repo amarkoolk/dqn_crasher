@@ -1,20 +1,55 @@
-# Collision Detection Research
+# Collision Detection - Contact Tracking Method
 
-This folder contains a clean setup for collision detection research using manual control to analyze collision directionality in highway driving scenarios.
+This folder contains the implementation of a contact tracking collision detection method for autonomous vehicle simulation.
 
 ## Overview
 
-This research focuses on:
+This implementation provides:
 
-1. **Collision Detection**: Identifying when collisions occur between vehicles
-2. **Directionality Analysis**: Determining the direction and type of collision (rear-end, side-swipe, head-on)
-3. **Crash Reproduction**: Manual control for crash analysis and research
+1. **Contact Tracking Detection**: Track which vertices hit which edges with rich collision data
+2. **Simple Output**: Clear statements of "EGO's corner X hit NPC's edge Y"
+3. **Active State Tracking**: Maintains edges and vertices of both EGO and NPC vehicles
+
+## Core Method: Contact Tracking
+
+**File**: `contact_tracking.py`
+
+**Algorithm**:
+
+- Test each vertex of polygon A against each edge of polygon B
+- Test each vertex of polygon B against each edge of polygon A
+- Record all contact points where vertices penetrate edges
+- Compute contact normals directly from edge geometry
+
+**Advantages**:
+
+- **Richer data**: Exact contact geometry (which corner hit which edge)
+- **Detailed tracking**: Records vertex ID, edge ID, position, normal, and penetration depth
+- **Simpler geometry**: Just point-to-edge distance tests
+
+**Output Data**:
+
+- Vertex ID and Edge ID for each contact
+- Contact position (world coordinates)
+- Contact normal vector
+- Penetration depth
 
 ## Key Components
 
+### Collision Detection
+
+- `contact_tracking.py` - **YOUR METHOD:** Clean implementation including:
+  - `Contact` dataclass (vertex/edge contact data)
+  - `find_primary_contact()` function (main detection algorithm)
+  - `classify_collision()` function (collision classification)
+  - `format_contact()` function (human-readable formatting)
+  - Uses SAT to detect collision and MTV to identify collision side
+- `sat_collision.py` - Original SAT method (for reference/baseline)
+
 ### Manual Control
 
-- `manual_control.py` - Keyboard-controlled vehicle for collision research
+- `manual_control_contact.py` - **Test controller** with contact tracking collision detection
+- `manual_control_universal.py` - Original SAT-based controller (baseline)
 
 ### Environment Configuration
 
@@ -26,10 +61,9 @@ This research focuses on:
 
 - `utils/config.py` - Configuration loading utility
 
-### Documentation & Visualization
+### Documentation
 
 - `docs/` - Documentation and observation references
-- `viz/` - Trajectory visualization tools (for future analysis)
 
 ## Observation Configuration
 
@@ -53,19 +87,35 @@ Reference: [Highway-Env Observations](https://highway-env.farama.org/observation
 
 ## Usage
 
-### Manual Control
+### Test Contact Tracking Method
 
-Run the manual control script to start keyboard-controlled driving:
+Run the contact tracking controller:
 
 ```bash
-# Basic usage with default single-agent config
-python manual_control.py
+cd Collision-Detection
+python manual_control_contact.py
+```
 
-# Use multi-agent configuration
-python manual_control.py --config configs/env/multi_agent.yaml
+**Output Example**:
 
-# Continue playing after crashes (instead of quitting)
-python manual_control.py --continue-after-crash
+```
+COLLISION DETECTED!
+Classification: Rear-End Collision
+
+Contact Details:
+  • EGO's Front-Right Corner hit NPC's Rear edge
+  • EGO's Front-Left Corner hit NPC's Rear edge
+```
+
+### Original SAT-based Control (Baseline)
+
+Run the original controller for comparison:
+
+```bash
+python manual_control_universal.py
+
+# Or with options:
+python manual_control_universal.py --continue-after-crash --config configs/env/multi_agent.yaml
 ```
 
 ### Controls
@@ -75,7 +125,70 @@ python manual_control.py --continue-after-crash
 - **R**: Reset environment
 - **Q**: Quit
 
-### Environment Setup
+## Contact Tracking Implementation Details
+
+The contact tracking method provides detailed information about each contact point:
+
+```python
+from contact_tracking import find_primary_contact, classify_collision, format_contact
+
+# Detect collision and find primary contact
+dt = 1.0 / env.config["simulation_frequency"]
+contact = find_primary_contact(
+    ego_polygon=ego.polygon(),
+    npc_polygon=npc.polygon(),
+    ego_velocity=ego.velocity * dt,
+    npc_velocity=npc.velocity * dt,
+    threshold=0.5  # Distance threshold in meters
+)
+
+# Access results
+if contact:
+    print(f"Contact: {format_contact(contact)}")
+    print(f"EGO vertex {contact.ego_vertex_id} hit NPC edge {contact.npc_edge_id}")
+    print(f"Position: {contact.position}")
+    print(f"Distance: {contact.distance}m")
+
+    # Classify collision
+    classification = classify_collision(contact)
+    print(f"Classification: {classification}")
+```
+
+**Data Structure**:
+
+```python
+@dataclass(frozen=True)
+class Contact:
+    ego_vertex_id: int       # ID of EGO vertex (0-3, see ordering below)
+    npc_edge_id: int         # ID of NPC edge (0-3, see ordering below)
+    distance: float          # Distance from vertex to edge (meters)
+    position: np.ndarray     # Contact position (world coordinates)
+    signed_distance: float   # Signed distance (for internal use)
+```
+
+**Highway-env Vertex Ordering** (verified from polygon data):
+
+- 0: Rear-Right Corner
+- 1: Rear-Left Corner
+- 2: Front-Left Corner
+- 3: Front-Right Corner
+
+**Highway-env Edge Ordering**:
+
+- 0: Rear edge (connects vertex 0 → 1)
+- 1: Left edge (connects vertex 1 → 2)
+- 2: Front edge (connects vertex 2 → 3)
+- 3: Right edge (connects vertex 3 → 0)
+
+## Research Goals
+
+1. **Collision Geometry**: Analyze exact contact points during collisions
+2. **Active State Tracking**: Maintain and track all vertices and edges
+3. **Richer Collision Data**: Identify which specific corner hit which specific edge
+4. **Directionality Classification**: Classify collision types based on contact geometry
+5. **Future DQN Integration**: Use rich collision data for reward shaping
+
+## Environment Setup
 
 The environment configurations are optimized for collision research:
 
@@ -87,16 +200,9 @@ config = load_config("configs/env/single_agent.yaml")
 env = gym.make("highway-v0", config=config, render_mode="human")
 ```
 
-## Research Goals
-
-1. **Collision Geometry**: Analyze vehicle positions and velocities at collision using manual control
-2. **Directionality Classification**: Classify collision types (rear-end, side-swipe, head-on) based on relative motion
-3. **Crash Reproduction**: Use keyboard control to reproduce and study specific crash scenarios
-4. **Real-time Analysis**: Detect collision states and directionality during manual driving
-
 ## Getting Started
 
-1. Run `python manual_control.py` to start manual driving
+1. Run `python manual_control_contact.py` to test contact tracking
 2. Use keyboard controls to explore different collision scenarios
-3. Observe collision detection and analysis output in real-time
-4. Experiment with different environment configurations
+3. Observe detailed contact information in real-time
+4. Compare with original SAT method using `manual_control_universal.py`
