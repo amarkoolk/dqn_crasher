@@ -27,6 +27,30 @@ from new_implementation import (
     print_classification,
 )
 
+# Monkey-patch to add speed labels to vehicles
+original_display = None
+
+def display_vehicle_with_speed(vehicle, surface, transparent=False, offscreen=False, label=False, draw_roof=False):
+    """Custom vehicle display that shows speed labels."""
+    from highway_env.vehicle.graphics import VehicleGraphics
+
+    # Call original display method
+    global original_display
+    if original_display is None:
+        original_display = VehicleGraphics.display
+
+    original_display(vehicle, surface, transparent, offscreen, label, draw_roof)
+
+    # Add speed label next to vehicle
+    if not offscreen and surface.is_visible(vehicle.position):
+        speed = np.linalg.norm(vehicle.velocity)
+        font = pygame.font.Font(None, 20)
+        text = f"{speed:.1f}"
+        text_surface = font.render(text, True, (10, 10, 10), (255, 255, 255))
+        position = surface.pos2pix(vehicle.position[0], vehicle.position[1])
+        # Position label slightly above and to the right of vehicle
+        surface.blit(text_surface, (position[0] + 20, position[1] - 25))
+
 
 class Action(Enum):
     LANE_LEFT = 0
@@ -38,19 +62,26 @@ class Action(Enum):
 
 class SATContactController:
     """Manual controller that surfaces MTV-based SAT collision classification."""
-    
+
     def __init__(self):
         script_dir = os.path.dirname(os.path.abspath(__file__))
         parent_dir = os.path.join(script_dir, '..')
         config_path = os.path.join(parent_dir, "configs/env/single_agent.yaml")
         self.config = load_config(config_path)
-        
+
+        # Enable speed labels by monkey-patching vehicle display
+        from highway_env.vehicle.graphics import VehicleGraphics
+        global original_display
+        if original_display is None:
+            original_display = VehicleGraphics.display
+        VehicleGraphics.display = display_vehicle_with_speed
+
         self.env = gym.make("highway-v0", config=self.config, render_mode="human")
         self.running = True
-        
+
         # Store the controlled vehicle ID at initialization
         self.controlled_vehicle_id = None
-        
+
         print("\n" + "="*60)
         print("MTV-Based SAT Collision Detection")
         print("="*60)
@@ -83,7 +114,12 @@ class SATContactController:
             action = Action.SLOWER
         
         return action
-    
+
+    def print_speeds(self, info):
+        """Print speed information to console (matching src implementation)."""
+        if "ego_speed" in info and "npc_speed" in info:
+            print(f"Ego Speed: {info['ego_speed']:.2f} m/s | NPC Speed: {info['npc_speed']:.2f} m/s", end='\r')
+
     def check_collision(self, info):
         """Check collision using the MTV-based SAT classification pipeline."""
         if not info.get("crashed", False):
@@ -161,7 +197,21 @@ class SATContactController:
                 continue
             
             _, _, _, _, info = self.env.step(action.value if action != "RESET" else Action.IDLE.value)
+
+            # Calculate and add speeds to info (matching src/dqn_crasher/training/runner.py:316-321)
+            env = self.env.unwrapped
+            if env.vehicle is not None:
+                ego = env.vehicle
+                info["ego_speed"] = (ego.velocity[0] ** 2 + ego.velocity[1] ** 2) ** 0.5
+
+                # Find closest NPC
+                for npc in env.road.vehicles:
+                    if npc is not ego:
+                        info["npc_speed"] = (npc.velocity[0] ** 2 + npc.velocity[1] ** 2) ** 0.5
+                        break
+
             self.env.render()
+            self.print_speeds(info)
             self.check_collision(info)
         
         self.env.close()
