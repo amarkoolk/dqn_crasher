@@ -21,25 +21,22 @@ action:
       - 32
       - 33
       - 34
-    type: DiscreteMetaAction
-  type: MultiAgentAction
-controlled_vehicles: 2
+  type: DiscreteMetaAction
+controlled_vehicles: 1
 duration: 40
 initial_lane_id: null
 initial_speed: 20
-lanes_count: 2
+lanes_count: 3
 mean_delta_v: 0
 mean_distance: 20
 observation:
-  observation_config:
-    type: Kinematics
-    normalize: False
-    see_behind: True
-    absolute: True
-    vehicles_count: 5
-  type: MultiAgentObservation
+  type: Kinematics
+  normalize: False
+  see_behind: True
+  absolute: True
+  vehicles_count: 5
 policy_frequency: 1
-vehicles_count: 0
+vehicles_count: 3
 spawn_configs:
   - behind_left
   - behind_right
@@ -50,16 +47,15 @@ spawn_configs:
   - forward_right
   - forward_center
 tolerance: 0.001
-collision_reward: 400
-ttc_x_reward: 4
-ttc_y_reward: 1
+collision_reward: -1
+ttc_x_reward: 0
+ttc_y_reward: 0
 adversarial: True
 normalize_reward: False
 use_mobil: False
-multi_car: False
 
 # For Ego Vehicle
-right_lane_reward: 0.0
-high_speed_reward: 0.0
+right_lane_reward: 0.1
+high_speed_reward: 0.4
 lane_change_reward: 0
 reward_speed_range: [20, 25]
