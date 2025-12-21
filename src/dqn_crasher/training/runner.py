@@ -4,6 +4,7 @@ import os
 from logging import raiseExceptions
 
 import gymnasium as gym
+from gymnasium.wrappers import RecordVideo
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -229,6 +230,18 @@ class MultiAgentRunner:
             train_B = True
 
         env = gym.make(self.env_name, config=self.gym_cfg, render_mode="rgb_array")
+        
+        # Record videos if requested (configured to record every episode by default for testing)
+        video_folder = os.path.join(self.cfg.get("root_directory", "results"), "videos")
+        # Use t_start to give a unique name, preventing overwrite since we recreate env each time
+        video_prefix = f"crash_step_{t_start}"
+        env = RecordVideo(
+            env, 
+            video_folder=video_folder, 
+            episode_trigger=lambda episode_id: True, # Record candidate, will delete if no crash
+            name_prefix=video_prefix,
+            disable_logger=True
+        )
         obs, info = env.reset()
         ego_s, npc_s = helpers.obs_to_state(
             obs, self.n_obs, self.dev, frame_stack=self.cfg["frame_stack"]
@@ -303,6 +316,38 @@ class MultiAgentRunner:
             # env step
             obs, reward, term, trunc, info = env.step(actions)
             done = term or trunc
+
+            # Extract collision classification if crashed
+            if info.get("crashed", False):
+                try:
+                    # Access the base environment to get the road objects
+                    base_env = env.unwrapped
+                    if hasattr(base_env, "road"):
+                        for v in base_env.road.vehicles:
+                            # We look for the ego vehicle or any vehicle that has collision data
+                            # Usually the ego vehicle (index 0 or flagged) will have it if it crashed
+                            if hasattr(v, "collision_classification") and v.collision_classification:
+                                cc = v.collision_classification
+                                
+                                # Refine side-swipe direction based on ego feature
+                                c_type = cc.collision_type
+                                if c_type == "side-swipe":
+                                    if "left" in cc.ego_feature:
+                                        c_type = "side-swipe-left"
+                                    elif "right" in cc.ego_feature:
+                                        c_type = "side-swipe-right"
+
+                                info["collision_details"] = {
+                                    "collision_type": c_type,
+                                    "contact_type": cc.contact_type,
+                                    "ego_feature": cc.ego_feature,
+                                    "npc_feature": cc.npc_feature,
+                                }
+                                break
+
+                except Exception:
+                    pass
+
 
             if self.cfg.get("render", False):
                 env.render()
@@ -402,4 +447,25 @@ class MultiAgentRunner:
                 self.B.test_store.end_episode()
 
         env.close()
-        return steps
+
+        # Video Cleanup Logic
+        # RecordVideo creates files like "{prefix}-episode-0.mp4" (since we reset env each time)
+        # We only want to keep the video if a crash occurred.
+        video_path = os.path.join(video_folder, f"{video_prefix}-episode-0.mp4")
+        if os.path.exists(video_path):
+            if not info.get("crashed", False):
+                try:
+                    os.remove(video_path)
+                except OSError:
+                    pass # Best effort cleanup
+            else:
+                # Crash happened, rename file to include the crash type
+                try:
+                    c_type = info.get("collision_details", {}).get("collision_type", "unknown_crash")
+                    new_name = f"{c_type}_step_{t_start}-episode-0.mp4"
+                    new_path = os.path.join(video_folder, new_name)
+                    os.rename(video_path, new_path)
+                except OSError:
+                    pass # Keep original name if rename fails
+
+        return t

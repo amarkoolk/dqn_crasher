@@ -49,7 +49,7 @@ def main():
         )
 
     device = DeviceHelper.get(config)
-    p_A, p_B = make_players(config, gym_config, device)
+    p_A, p_B = make_players(config, device)
 
     runner = MultiAgentRunner(config, device, p_A, p_B)
 
