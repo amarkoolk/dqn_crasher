@@ -122,7 +122,7 @@ def populate_stats(info, episode_statistics: dict):
                 episode_statistics[stat_map][val] = 0
             episode_statistics[stat_map][val] += 1
             
-            # Update cumulative counters for types (persists)
+            # Update crash counters for type of collisison
             if key == "collision_type":
                 if val not in episode_statistics["total_crashes_by_type"]:
                     episode_statistics["total_crashes_by_type"][val] = 0
