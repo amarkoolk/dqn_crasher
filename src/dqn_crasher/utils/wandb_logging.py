@@ -2,7 +2,10 @@ import os
 
 import numpy as np
 
+
 import wandb
+os.environ["WANDB_SILENT"] = "true"
+
 
 
 def initialize_logging(
@@ -226,10 +229,19 @@ def log_stats(info, episode_statistics: dict, checkpoint=False, checkpoint_step=
             }
         )
 
+    # Log detailed collision stats
+    allowed_keys = ["rear-end", "side-swipe", "side-swipe-left", "side-swipe-right"]
+    
+    if "total_crashes_by_type" in episode_statistics:
+        for key, count in episode_statistics["total_crashes_by_type"].items():
+           
+            if any(allowed in key for allowed in allowed_keys):
+                wandb_log[f"{prefix}/crashes/collision_type/{key}"] = count
+
     # Get the current episode number or checkpoint step
     current_step = episode_statistics.get("episode_num", 0)
 
-    # Add the appropriate step metric to the log dict
+    # Add the step metric to the log dict
     if step_metric == "checkpoint_step":
         wandb_log["checkpoint_step"] = current_step
     elif step_metric == "testing_step":

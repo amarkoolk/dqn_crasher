@@ -22,7 +22,9 @@ class TrajectoryStore(object):
         split = self.original_file_path.split("/")
         split[-2] += f"/{step}"
         file_path = os.path.join(*split)
-        file_path = "/" + file_path
+        file_path = os.path.join(*split)
+        if self.original_file_path.startswith("/"):
+            file_path = "/" + file_path
 
         self.dirpath = os.path.dirname(file_path)
         if self.dirpath:

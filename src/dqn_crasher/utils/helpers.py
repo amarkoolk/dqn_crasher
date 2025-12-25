@@ -87,6 +87,12 @@ def initialize_stats(queue_len=100) -> dict:
         "checkpoint_step": 0,
         "metrics_type": "training",
         "checkpoint_testing": False,
+        "crashes_by_type": {},
+        "crashes_by_contact": {},
+        "crashes_by_ego_feature": {},
+        "crashes_by_npc_feature": {},
+        # Cumulative counters that persist across episodes
+        "total_crashes_by_type": {},
     }
 
 
@@ -102,6 +108,25 @@ def populate_stats(info, episode_statistics: dict):
     episode_statistics["collision_reward"] += info["rewards"]["collision_reward"]
     episode_statistics["episode_rewards"] += info["rewards"]["total"]
     episode_statistics["epsilon"] = info["eps_threshold"]
+
+    if "collision_details" in info:
+        cd = info["collision_details"]
+        for key, stat_map in [
+            ("collision_type", "crashes_by_type"),
+            ("contact_type", "crashes_by_contact"),
+            ("ego_feature", "crashes_by_ego_feature"),
+            ("npc_feature", "crashes_by_npc_feature"),
+        ]:
+            val = cd.get(key, "unknown")
+            if val not in episode_statistics[stat_map]:
+                episode_statistics[stat_map][val] = 0
+            episode_statistics[stat_map][val] += 1
+            
+            # Update crash counters for type of collisison
+            if key == "collision_type":
+                if val not in episode_statistics["total_crashes_by_type"]:
+                    episode_statistics["total_crashes_by_type"][val] = 0
+                episode_statistics["total_crashes_by_type"][val] += 1
 
 
 def reset_stats(stats: dict, preserve_episode_num=False):
@@ -132,6 +157,11 @@ def reset_stats(stats: dict, preserve_episode_num=False):
     stats["collision_reward"] = 0.0
     stats["ttc_x_reward"] = 0.0
     stats["ttc_y_reward"] = 0.0
+
+    stats["crashes_by_type"] = {}
+    stats["crashes_by_contact"] = {}
+    stats["crashes_by_ego_feature"] = {}
+    stats["crashes_by_npc_feature"] = {}
 
     # Restore all preserved counters or increment episode_num
     if preserve_episode_num and counters_to_preserve:
