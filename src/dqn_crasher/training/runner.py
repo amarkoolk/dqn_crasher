@@ -9,6 +9,7 @@ import torch
 from tqdm import tqdm
 
 import dqn_crasher.scenarios.policies as policies
+from dqn_crasher.scenarios.amago_policy import AMAGOPolicy
 import dqn_crasher.utils.helpers as helpers
 import wandb
 from dqn_crasher.agents.dqn_agent import DQN_Agent
@@ -157,13 +158,19 @@ class MultiAgentRunner:
                 policy_iterate = [self.B]
 
         for i in tqdm(range(len(policy_iterate))):
+            if isinstance(self.A, AMAGOPolicy):
+                self.A.reset(test=True)
+            if isinstance(self.B, AMAGOPolicy):
+                self.B.reset(test=True)
             for j in tqdm(range(total_eps), leave = False):
                 if scenario_vs_mobil:
                     self.A.reset(test=True)
                     self.B.reset(test=True)
                 else:
-                    self.A.reset(test=True)
-                    self.B.reset(test=True)
+                    if not isinstance(self.A, AMAGOPolicy):
+                        self.A.reset(test=True)
+                    if not isinstance(self.B, AMAGOPolicy):
+                        self.B.reset(test=True)
                 self._set_config()
 
                 # Run the episode
@@ -229,7 +236,12 @@ class MultiAgentRunner:
             train_B = True
 
         env = gym.make(self.env_name, config=self.gym_cfg, render_mode="rgb_array")
+        env = gym.wrappers.RecordVideo(env, video_folder=f"./episode_{stats["episode_num"]}", episode_trigger=lambda e: True)
+        self.cfg['render'] = True
         obs, info = env.reset()
+        reward = None
+        term = None
+        trunc = None
         ego_s, npc_s = helpers.obs_to_state(
             obs, self.n_obs, self.dev, frame_stack=self.cfg["frame_stack"]
         )
@@ -292,11 +304,17 @@ class MultiAgentRunner:
         steps = 0
 
         while not done and t < total_timesteps:
-            action_logits_A = self.A.select_action(ego_s, npc_s, t)
-            action_logits_B = self.B.select_action(npc_s, ego_s, t)
+            if isinstance(self.A, AMAGOPolicy):
+                a_A, action_logits_A = self.A.select_action(obs, reward, term, trunc, info)
+            else:
+                action_logits_A = self.A.select_action(ego_s, npc_s, t)
+                a_A = torch.argmax(action_logits_A)
 
-            a_A = torch.argmax(action_logits_A)
-            a_B = torch.argmax(action_logits_B)
+            if isinstance(self.B, AMAGOPolicy):
+                a_B, action_logits_B = self.B.select_action(obs, reward, term, trunc, info)
+            else:
+                action_logits_B = self.B.select_action(npc_s, ego_s, t)
+                a_B = torch.argmax(action_logits_B)
 
             actions = (a_A.cpu().numpy(), a_B.cpu().numpy())
 
